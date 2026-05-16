@@ -37,7 +37,7 @@ if(chdir(args[1]) != 0){
 
 int lsh_help(char **args)
 {
-    int i;
+    (void)args;
     printf("Soumya's LSH\n");
 printf("type program names and arguments, and hit enter.\n");
 printf("The following are built in:\n");
@@ -52,13 +52,14 @@ return 1;
 
 int lsh_exit(char **args)
 {
+    (void)args;
     return 0;
 }
 
 
 int lsh_launch(char **args)
 {
-    pid_t pid, wpid;
+    pid_t pid;
     int status;
 
     pid = fork();
@@ -78,7 +79,7 @@ int lsh_launch(char **args)
     {
         do
         {
-            wpid = waitpid(pid, &status, WUNTRACED);
+            waitpid(pid, &status, WUNTRACED);
         } while (!WIFEXITED(status) && !WIFSIGNALED(status));
     }
     return 1;
@@ -203,6 +204,8 @@ void lsh_loop(void)
 
 int main(int argc, char **argv)
 {
+    (void)argc;
+    (void)argv;
     lsh_loop();
     return EXIT_SUCCESS;
 }

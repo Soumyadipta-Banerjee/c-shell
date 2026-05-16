@@ -1,31 +1,47 @@
-# C Shell Project
+# c-shell
 
-A simple UNIX shell implementation written in C, created as a learning project.
+A minimalist Unix shell implementation written in C, exploring the core concepts of process management, system calls, and the POSIX API.
 
 ## Features
 
-* Reads commands from standard input.
-* Parses command lines into arguments.
-* Executes external commands using `fork` and `execvp`.
-* Includes built-in commands: `cd`, `help`, and `exit`.
+- **Process Management**: Uses `fork()`, `execvp()`, and `waitpid()` for child process lifecycle management.
+- **Built-in Commands**: Custom implementations of `cd`, `help`, and `exit`.
+- **Command Parsing**: Dynamic string tokenization and memory management for handling user input.
+- **Error Handling**: Robust error reporting using `perror` and system-level checks.
 
-## How to Build and Run
+## Technical Highlights
 
-1.  **Compile the source code:**
+- **POSIX API**: Leverages industry-standard Unix interfaces for portable system programming.
+- **Memory Safety**: Careful management of dynamic buffers using `malloc` and `realloc`.
+- **Process Synchronization**: Correct use of wait status macros (`WIFEXITED`, `WIFSIGNALED`) for reliable process tracking.
+
+## Getting Started
+
+### Prerequisites
+
+- A C compiler (GCC or Clang)
+- Make (optional, but recommended)
+
+### Build and Run
+
+1.  **Clone the repository**:
     ```bash
-    gcc -o my_shell *.c
+    git clone https://github.com/Soumyadipta-Banerjee/c-shell.git
+    cd c-shell
     ```
 
-2.  **Run the shell:**
+2.  **Build using Makefile**:
     ```bash
-    ./my_shell
+    make
     ```
 
-## Usage Example
-echo "Hello from my shell!"
-Hello from my shell!
-ls -l
-total 16
--rwxr-xr-x 1 user user 8424 Oct 6 12:40 my_shell
--rw-r--r-- 1 user user  891 Oct 6 12:30 shell.c
-exit
+3.  **Run the shell**:
+    ```bash
+    ./c-shell
+    ```
+
+Alternatively, you can run directly with `make run`.
+
+## License
+
+This project is open-source and available under the [MIT License](LICENSE).

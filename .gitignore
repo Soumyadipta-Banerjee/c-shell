@@ -1,0 +1,17 @@
+# Binaries
+c-shell
+my_shell
+*.o
+*.out
+
+# Object files
+*.o
+
+# Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
