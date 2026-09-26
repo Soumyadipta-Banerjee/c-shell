@@ -1,7 +1,7 @@
 CC = gcc
 CFLAGS = -Wall -Wextra -pedantic -std=c99 -O2 -Iinclude
 TARGET = c-shell
-SRCS = src/main.c src/builtins.c src/execute.c src/parser.c src/signals.c
+SRCS = src/main.c src/builtins.c src/execute.c src/parser.c src/signals.c src/jobs.c
 OBJS = $(SRCS:.c=.o)
 
 all: $(TARGET)

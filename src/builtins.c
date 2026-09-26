@@ -3,6 +3,7 @@
 
 #include "builtins.h"
 #include "execute.h"
+#include "jobs.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -12,14 +13,16 @@ char *builtin_str[] = {
     "cd",
     "pwd",
     "help",
-    "exit"
+    "exit",
+    "jobs"
 };
 
 int (*builtin_func[])(char **) = {
     &lsh_cd,
     &lsh_pwd,
     &lsh_help,
-    &lsh_exit
+    &lsh_exit,
+    &lsh_jobs
 };
 
 int lsh_num_builtins(void)
@@ -75,6 +78,7 @@ int lsh_help(char **args)
     }
     printf("\nFeatures supported:\n");
     printf("  - Command Chaining: ; (seq), && (and), || (or)\n");
+    printf("  - Background Jobs:  & (async), jobs (list active)\n");
     printf("  - Pipelines:        cmd1 | cmd2 | ... | cmdN\n");
     printf("  - I/O Redirection:  < (input), > (output), >> (append)\n");
     printf("  - Quoted strings:   \"hello world\" or 'hello world'\n");

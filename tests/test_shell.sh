@@ -330,6 +330,27 @@ else
     echo -e "${RED}[FAIL]${NC} (got $EXIT_VAL, expected 37)"
 fi
 
+# 31. Background: job launches asynchronously with &
+run_test "Background: job launches asynchronously with &" \
+    "sleep 1 &" \
+    "[1]" \
+    "contains"
+
+# 32. Background: jobs builtin lists active tasks
+run_test "Background: jobs builtin lists active tasks" \
+    "sleep 2 &
+jobs" \
+    "Running" \
+    "contains"
+
+# 33. Background: finished job is reaped and reported
+run_test "Background: finished job is reaped and reported" \
+    "sleep 0.4 &
+sleep 0.7
+jobs" \
+    "Done" \
+    "contains"
+
 echo -e "${BLUE}========================================${NC}"
 if [ "$FAILED" -eq 0 ]; then
     echo -e "${GREEN}All $TOTAL tests passed successfully!${NC}"
@@ -338,3 +359,4 @@ else
     echo -e "${RED}Test Results: $PASSED passed, $FAILED failed out of $TOTAL.${NC}"
     exit 1
 fi
+

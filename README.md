@@ -11,6 +11,11 @@ A feature-rich Unix shell implementation written in C, exploring process managem
   - `pwd`: Prints the current working directory.
   - `help`: Displays built-ins and feature summary.
   - `exit [code]`: Terminates the shell session with an optional exit code.
+  - `jobs`: Lists all active background jobs with their job ID, state, and command name.
+- **Background Execution & Job Control**:
+  - `&`: Runs commands or pipelines asynchronously in the background (`sleep 5 &`).
+  - Automatic non-blocking zombie process reaping (`waitpid` with `WNOHANG`).
+  - Background process completion notifications (`[1]+ Done`).
 - **Command Chaining**:
   - `;`: Sequential execution (`cmd1 ; cmd2 ; cmd3`).
   - `&&`: Conditional AND execution — runs the next command only if the previous succeeded (`cmd1 && cmd2`).
@@ -24,7 +29,7 @@ A feature-rich Unix shell implementation written in C, exploring process managem
   - `$?`: Expands to the exit status code of the most recently executed command.
   - `$VAR`: Expands environment variables (e.g. `$USER`, `$HOME`, `$PATH`).
 - **Quoted Arguments**: Supports single (`'...'`) and double (`"..."`) quotes for arguments with spaces, with single quotes suppressing expansion.
-- **Signal Handling**: Protected interactive prompt against `Ctrl+C` (`SIGINT`) and `Ctrl+Z` (`SIGTSTP`); correctly forwards interruption signals to foreground child processes.
+- **Signal Handling**: Protected interactive prompt against `Ctrl+C` (`SIGINT`) and `Ctrl+Z` (`SIGTSTP`); correctly forwards interruption signals to foreground child processes while background processes are shielded.
 - **Robust Terminal Handling**: Clean `EOF` / `Ctrl+D` exit and non-interactive pipe detection via `isatty()`.
 
 ## Project Structure
@@ -34,16 +39,18 @@ c-shell/
 ├── include/
 │   ├── builtins.h     # Built-in declarations and dispatch table
 │   ├── execute.h      # Process execution, pipelines, and command chaining
+│   ├── jobs.h         # Background job tracking and non-blocking reaping
 │   ├── parser.h       # Tokenization, quoting, line reading, and expansions
 │   └── signals.h      # Signal handlers (SIGINT, SIGTSTP)
 ├── src/
-│   ├── builtins.c     # Implementations of cd, pwd, help, exit
+│   ├── builtins.c     # Implementations of cd, pwd, help, exit, jobs
 │   ├── execute.c      # Execution engine, I/O redirection, and pipelines
+│   ├── jobs.c         # Job list management and zombie process cleanup
 │   ├── main.c         # Shell loop entrypoint
 │   ├── parser.c       # Tokenizer, dynamic prompt, and variable expansion
 │   └── signals.c      # Signal setup and protection
 ├── tests/
-│   └── test_shell.sh  # Automated test suite (30 test cases)
+│   └── test_shell.sh  # Automated test suite (33 test cases)
 ├── .github/
 │   └── workflows/
 │       └── ci.yml     # Automated CI pipeline
@@ -103,6 +110,10 @@ pwd
 cd ..
 pwd
 
+# Background jobs
+sleep 10 &
+jobs
+
 # Command Chaining
 echo "Step 1" ; echo "Step 2"
 make && ./c-shell
@@ -127,8 +138,9 @@ exit 0
 
 ## Automated Testing
 
-The project includes an automated test suite ([tests/test_shell.sh](tests/test_shell.sh)) containing **30 test cases** covering:
-- Built-in commands (`pwd`, `cd`, `help`, `exit [code]`)
+The project includes an automated test suite ([tests/test_shell.sh](tests/test_shell.sh)) containing **33 test cases** covering:
+- Built-in commands (`pwd`, `cd`, `help`, `exit [code]`, `jobs`)
+- Background processes (`&`), job tracking, and asynchronous zombie reaping
 - External command execution
 - Quoting behavior (single and double quotes with whitespace preservation)
 - Command chaining (`&&`, `||`, `;`) and short-circuit evaluation

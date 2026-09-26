@@ -4,6 +4,7 @@
 #include "signals.h"
 #include "parser.h"
 #include "execute.h"
+#include "jobs.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -15,6 +16,7 @@ void lsh_loop(void)
 
     while (!g_should_exit)
     {
+        jobs_reap();
         lsh_print_prompt();
         line = lsh_read_line();
         if (line == NULL)
@@ -37,7 +39,9 @@ int main(int argc, char **argv)
 {
     (void)argc;
     (void)argv;
+    jobs_init();
     lsh_init_signals();
     lsh_loop();
+    jobs_cleanup();
     return g_last_exit_status;
 }

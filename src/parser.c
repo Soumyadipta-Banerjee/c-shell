@@ -140,7 +140,7 @@ ShellToken **lsh_split_line(char *line)
             tok->is_literal = 0;
             p += 2;
         }
-        else if (*p == ';' || *p == '|' || *p == '<' || *p == '>')
+        else if (*p == ';' || *p == '|' || *p == '<' || *p == '>' || *p == '&')
         {
             tok->text = malloc(2);
             tok->text[0] = *p;

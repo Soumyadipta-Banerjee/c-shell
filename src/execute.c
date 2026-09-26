@@ -4,6 +4,7 @@
 #include "execute.h"
 #include "builtins.h"
 #include "parser.h"
+#include "jobs.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -14,6 +15,32 @@
 
 int g_last_exit_status = 0;
 int g_should_exit = 0;
+
+static char *build_cmd_str(char **args)
+{
+    size_t len = 0;
+    for (int i = 0; args[i] != NULL; i++)
+    {
+        len += strlen(args[i]) + 1;
+    }
+    len += 4;
+    char *res = malloc(len);
+    if (!res)
+    {
+        return strdup("job &");
+    }
+    res[0] = '\0';
+    for (int i = 0; args[i] != NULL; i++)
+    {
+        strcat(res, args[i]);
+        if (args[i + 1] != NULL)
+        {
+            strcat(res, " ");
+        }
+    }
+    strcat(res, " &");
+    return res;
+}
 
 static void handle_redirection(char **args)
 {
@@ -97,24 +124,35 @@ static void handle_redirection(char **args)
     }
 }
 
-int lsh_launch(char **args)
+int lsh_launch(char **args, int is_bg)
 {
     pid_t pid;
     int status;
 
     struct sigaction sa_ignore, sa_orig_int, sa_orig_tstp;
-    memset(&sa_ignore, 0, sizeof(sa_ignore));
-    sa_ignore.sa_handler = SIG_IGN;
-    sigemptyset(&sa_ignore.sa_mask);
-    sa_ignore.sa_flags = 0;
-    sigaction(SIGINT, &sa_ignore, &sa_orig_int);
-    sigaction(SIGTSTP, &sa_ignore, &sa_orig_tstp);
+    if (!is_bg)
+    {
+        memset(&sa_ignore, 0, sizeof(sa_ignore));
+        sa_ignore.sa_handler = SIG_IGN;
+        sigemptyset(&sa_ignore.sa_mask);
+        sa_ignore.sa_flags = 0;
+        sigaction(SIGINT, &sa_ignore, &sa_orig_int);
+        sigaction(SIGTSTP, &sa_ignore, &sa_orig_tstp);
+    }
 
     pid = fork();
     if (pid == 0)
     {
-        signal(SIGINT, SIG_DFL);
-        signal(SIGTSTP, SIG_DFL);
+        if (is_bg)
+        {
+            signal(SIGINT, SIG_IGN);
+            signal(SIGTSTP, SIG_IGN);
+        }
+        else
+        {
+            signal(SIGINT, SIG_DFL);
+            signal(SIGTSTP, SIG_DFL);
+        }
 
         handle_redirection(args);
         if (args[0] == NULL)
@@ -130,12 +168,23 @@ int lsh_launch(char **args)
     else if (pid < 0)
     {
         perror("lsh: fork");
-        sigaction(SIGINT, &sa_orig_int, NULL);
-        sigaction(SIGTSTP, &sa_orig_tstp, NULL);
+        if (!is_bg)
+        {
+            sigaction(SIGINT, &sa_orig_int, NULL);
+            sigaction(SIGTSTP, &sa_orig_tstp, NULL);
+        }
         return 1;
     }
     else
     {
+        if (is_bg)
+        {
+            char *cmd_str = build_cmd_str(args);
+            jobs_add(pid, cmd_str);
+            free(cmd_str);
+            return 0;
+        }
+
         do
         {
             waitpid(pid, &status, WUNTRACED);
@@ -152,23 +201,23 @@ int lsh_launch(char **args)
         {
             printf("\n[%d] Stopped\n", pid);
         }
-    }
 
-    sigaction(SIGINT, &sa_orig_int, NULL);
-    sigaction(SIGTSTP, &sa_orig_tstp, NULL);
+        sigaction(SIGINT, &sa_orig_int, NULL);
+        sigaction(SIGTSTP, &sa_orig_tstp, NULL);
 
-    if (WIFEXITED(status))
-    {
-        return WEXITSTATUS(status);
-    }
-    else if (WIFSIGNALED(status))
-    {
-        return 128 + WTERMSIG(status);
+        if (WIFEXITED(status))
+        {
+            return WEXITSTATUS(status);
+        }
+        else if (WIFSIGNALED(status))
+        {
+            return 128 + WTERMSIG(status);
+        }
     }
     return 1;
 }
 
-int lsh_execute_pipeline(char ***cmd_args, int num_cmds)
+int lsh_execute_pipeline(char ***cmd_args, int num_cmds, int is_bg)
 {
     int num_pipes = num_cmds - 1;
     int pipefds[2 * num_pipes];
@@ -190,20 +239,31 @@ int lsh_execute_pipeline(char ***cmd_args, int num_cmds)
     }
 
     struct sigaction sa_ignore, sa_orig_int, sa_orig_tstp;
-    memset(&sa_ignore, 0, sizeof(sa_ignore));
-    sa_ignore.sa_handler = SIG_IGN;
-    sigemptyset(&sa_ignore.sa_mask);
-    sa_ignore.sa_flags = 0;
-    sigaction(SIGINT, &sa_ignore, &sa_orig_int);
-    sigaction(SIGTSTP, &sa_ignore, &sa_orig_tstp);
+    if (!is_bg)
+    {
+        memset(&sa_ignore, 0, sizeof(sa_ignore));
+        sa_ignore.sa_handler = SIG_IGN;
+        sigemptyset(&sa_ignore.sa_mask);
+        sa_ignore.sa_flags = 0;
+        sigaction(SIGINT, &sa_ignore, &sa_orig_int);
+        sigaction(SIGTSTP, &sa_ignore, &sa_orig_tstp);
+    }
 
     for (int i = 0; i < num_cmds; i++)
     {
         pids[i] = fork();
         if (pids[i] == 0)
         {
-            signal(SIGINT, SIG_DFL);
-            signal(SIGTSTP, SIG_DFL);
+            if (is_bg)
+            {
+                signal(SIGINT, SIG_IGN);
+                signal(SIGTSTP, SIG_IGN);
+            }
+            else
+            {
+                signal(SIGINT, SIG_DFL);
+                signal(SIGTSTP, SIG_DFL);
+            }
 
             if (i > 0)
             {
@@ -253,8 +313,11 @@ int lsh_execute_pipeline(char ***cmd_args, int num_cmds)
         {
             perror("lsh: fork");
             free(pids);
-            sigaction(SIGINT, &sa_orig_int, NULL);
-            sigaction(SIGTSTP, &sa_orig_tstp, NULL);
+            if (!is_bg)
+            {
+                sigaction(SIGINT, &sa_orig_int, NULL);
+                sigaction(SIGTSTP, &sa_orig_tstp, NULL);
+            }
             return 1;
         }
     }
@@ -262,6 +325,15 @@ int lsh_execute_pipeline(char ***cmd_args, int num_cmds)
     for (int i = 0; i < 2 * num_pipes; i++)
     {
         close(pipefds[i]);
+    }
+
+    if (is_bg)
+    {
+        char *cmd_str = build_cmd_str(cmd_args[0]);
+        jobs_add(pids[num_cmds - 1], cmd_str);
+        free(cmd_str);
+        free(pids);
+        return 0;
     }
 
     int any_signaled = 0;
@@ -298,7 +370,7 @@ int lsh_execute_pipeline(char ***cmd_args, int num_cmds)
     return last_status;
 }
 
-int lsh_execute(char **args)
+int lsh_execute(char **args, int is_bg)
 {
     if (args[0] == NULL)
     {
@@ -346,7 +418,7 @@ int lsh_execute(char **args)
             }
         }
 
-        int status = lsh_execute_pipeline(cmd_args, num_cmds);
+        int status = lsh_execute_pipeline(cmd_args, num_cmds, is_bg);
         free(cmd_args);
         return status;
     }
@@ -355,11 +427,29 @@ int lsh_execute(char **args)
     {
         if (strcmp(args[0], builtin_str[i]) == 0)
         {
+            if (is_bg)
+            {
+                pid_t pid = fork();
+                if (pid == 0)
+                {
+                    int res = (*builtin_func[i])(args);
+                    exit(res == 0 ? EXIT_SUCCESS : EXIT_FAILURE);
+                }
+                else if (pid > 0)
+                {
+                    char *cmd_str = build_cmd_str(args);
+                    jobs_add(pid, cmd_str);
+                    free(cmd_str);
+                    return 0;
+                }
+                perror("lsh: fork");
+                return 1;
+            }
             return (*builtin_func[i])(args);
         }
     }
 
-    return lsh_launch(args);
+    return lsh_launch(args, is_bg);
 }
 
 int lsh_execute_line(ShellToken **tokens)
@@ -376,7 +466,8 @@ int lsh_execute_line(ShellToken **tokens)
         {
             if (strcmp(tokens[i]->text, ";") == 0 ||
                 strcmp(tokens[i]->text, "&&") == 0 ||
-                strcmp(tokens[i]->text, "||") == 0)
+                strcmp(tokens[i]->text, "||") == 0 ||
+                strcmp(tokens[i]->text, "&") == 0)
             {
                 connector = tokens[i]->text;
                 i++;
@@ -390,6 +481,8 @@ int lsh_execute_line(ShellToken **tokens)
 
         if (cmd_len > 0)
         {
+            int is_bg = (connector != NULL && strcmp(connector, "&") == 0);
+
             if (execute_this_cmd)
             {
                 char **args = malloc((cmd_len + 1) * sizeof(char *));
@@ -405,7 +498,7 @@ int lsh_execute_line(ShellToken **tokens)
                 }
                 args[cmd_len] = NULL;
 
-                g_last_exit_status = lsh_execute(args);
+                g_last_exit_status = lsh_execute(args, is_bg);
 
                 for (int j = 0; j < cmd_len; j++)
                 {
@@ -417,7 +510,7 @@ int lsh_execute_line(ShellToken **tokens)
 
         if (connector != NULL)
         {
-            if (strcmp(connector, ";") == 0)
+            if (strcmp(connector, ";") == 0 || strcmp(connector, "&") == 0)
             {
                 execute_this_cmd = 1;
             }
