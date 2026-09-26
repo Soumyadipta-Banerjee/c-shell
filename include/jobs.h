@@ -25,6 +25,9 @@ void jobs_list(void);
 /* Cleans up remaining job data on exit */
 void jobs_cleanup(void);
 
+/* Returns the number of currently active jobs */
+int jobs_count(void);
+
 /* Built-in 'jobs' command */
 int lsh_jobs(char **args);
 

@@ -111,6 +111,19 @@ void jobs_cleanup(void)
     next_job_id = 1;
 }
 
+int jobs_count(void)
+{
+    jobs_reap();
+    int count = 0;
+    Job *curr = job_list;
+    while (curr != NULL)
+    {
+        count++;
+        curr = curr->next;
+    }
+    return count;
+}
+
 int lsh_jobs(char **args)
 {
     (void)args;

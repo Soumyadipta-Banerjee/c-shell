@@ -389,6 +389,36 @@ echo \${APEX_PREFIX}_Shell" \
     "Super_Shell" \
     "exact"
 
+# 39. Observability: sysinfo prints system dashboard
+run_test "Observability: sysinfo dashboard" \
+    "sysinfo" \
+    "Apex System Observability" \
+    "contains"
+
+# 40. Observability: time profiles execution and prints telemetry
+run_test "Observability: time profiles command execution" \
+    "time echo profiling_test" \
+    "Execution Telemetry" \
+    "contains"
+
+# 41. Observability: time preserves exit status of timed command
+run_test "Observability: time preserves command exit status" \
+    "time false ; echo \$?" \
+    "1" \
+    "contains"
+
+# 42. Observability: time works with pipelines
+run_test "Observability: time with pipeline" \
+    "time echo telemetry | tr a-z A-Z" \
+    "TELEMETRY" \
+    "contains"
+
+# 43. Observability: time without args reports error
+run_test "Observability: time without command reports usage" \
+    "time" \
+    "time: missing command to profile" \
+    "contains"
+
 echo -e "${BLUE}========================================${NC}"
 if [ "$FAILED" -eq 0 ]; then
     echo -e "${GREEN}All $TOTAL tests passed successfully!${NC}"

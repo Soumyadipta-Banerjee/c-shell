@@ -57,6 +57,7 @@ This document details the architectural layout, component boundaries, execution 
 | **Execution Engine** | `include/execute.h` | `src/execute.c` | Chaining flow control (short-circuit logic), argument expansion, file redirection (`dup2`), multi-stage pipeline creation, and process launching. |
 | **Built-ins** | `include/builtins.h` | `src/builtins.c` | In-process commands that modify shell state (`cd`, `exit`, `pwd`, `help`, `jobs`, and future `export`, `unset`, `alias`). |
 | **Job Control** | `include/jobs.h` | `src/jobs.c` | Background task tracking linked list, non-blocking asynchronous zombie reaping (`waitpid` with `WNOHANG`), and job status formatting. |
+| **Telemetry & Observability** | `include/telemetry.h` | `src/telemetry.c` | Process profiling (`getrusage`, `clock_gettime`), execution telemetry interceptor (`time`), and `/proc` system resource dashboard (`sysinfo`). |
 | **Signal Handling** | `include/signals.h` | `src/signals.c` | POSIX `sigaction` registration for `SIGINT` and `SIGTSTP`, shielding the interactive prompt and delegating signals to foreground child processes. |
 
 ---

@@ -4,6 +4,7 @@
 #include "builtins.h"
 #include "execute.h"
 #include "jobs.h"
+#include "telemetry.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -19,7 +20,8 @@ char *builtin_str[] = {
     "jobs",
     "export",
     "unset",
-    "env"
+    "env",
+    "sysinfo"
 };
 
 int (*builtin_func[])(char **) = {
@@ -30,7 +32,8 @@ int (*builtin_func[])(char **) = {
     &lsh_jobs,
     &lsh_export,
     &lsh_unset,
-    &lsh_env
+    &lsh_env,
+    &lsh_sysinfo
 };
 
 int lsh_num_builtins(void)
@@ -85,12 +88,13 @@ int lsh_help(char **args)
         printf("  %s\n", builtin_str[i]);
     }
     printf("\nFeatures supported:\n");
+    printf("  - Observability:    time <cmd> (rusage profiler), sysinfo (proc dashboard)\n");
     printf("  - Command Chaining: ; (seq), && (and), || (or)\n");
     printf("  - Background Jobs:  & (async), jobs (list active)\n");
     printf("  - Environment:      export KEY=VALUE, unset KEY, env\n");
     printf("  - Pipelines:        cmd1 | cmd2 | ... | cmdN\n");
     printf("  - I/O Redirection:  < (input), > (output), >> (append)\n");
-    printf("  - Expansions:       $VAR, $?, ~ (tilde path)\n");
+    printf("  - Expansions:       $VAR, ${VAR}, $?, $$, ~ (tilde path)\n");
     printf("  - Prompt:           Git-aware branch and ANSI styling\n");
     printf("  - Quoted strings:   \"double quotes\" (expanded) and 'single quotes' (literal)\n");
     printf("  - Signal Handling:  Ctrl+C (SIGINT) and Ctrl+Z (SIGTSTP) protection\n");

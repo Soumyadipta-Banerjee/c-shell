@@ -51,17 +51,17 @@ Complete the environment lifecycle so variables can be set, unset, and inspected
      - Green for user/host, Blue for directory, Cyan for branch, Red `✗` for dirty, Green `✓` for clean.
 
 ### Implementation Checklist
-- [ ] Create `include/env.h` and `src/env.c` (or add to `builtins`).
-- [ ] Implement `lsh_export`, `lsh_unset`, `lsh_env`.
-- [ ] Add Git repository detection and branch reader in `src/parser.c`.
-- [ ] Add automated tests for `export`, `unset`, `env`, and `~/` expansion in `tests/test_shell.sh`.
+- [x] Implement `lsh_export`, `lsh_unset`, `lsh_env` built-ins.
+- [x] Add Git repository detection and branch reader in `src/parser.c`.
+- [x] Add tilde expansion and braced variable expansion `${VAR}` in `src/parser.c`.
+- [x] Add automated tests for `export`, `unset`, `env`, and `~/` expansion in `tests/test_shell.sh`.
 
 ---
 
 ## Phase 2: Systems Observability & Telemetry
 
 ### Objectives
-Turn `c-shell` into a first-class tool for systems programmers by providing hardware, kernel, and process resource telemetry.
+Turn `apex-shell` into a first-class tool for systems programmers by providing hardware, kernel, and process resource telemetry.
 
 ### Requirements & Specifications
 1. **Command Execution Profiler (`time` Built-in)**:
@@ -74,22 +74,22 @@ Turn `c-shell` into a first-class tool for systems programmers by providing hard
    - Display format:
      ```text
      ┌─ Execution Telemetry ──────────────────────────────────────────┐
-     │ ⏱  Wall Time: 0.142s   | CPU: 0.108s user, 0.034s sys          │
-     │ 💾 Peak RAM:  32.4 MB  | Page Faults: 1,842 minor, 0 major     │
-     │ 🔄 Context Switches: 42 voluntary, 8 involuntary              │
+     │ Wall Time: 0.1420s   | CPU: 0.1080s user, 0.0340s sys          │
+     │ Peak RAM:  32.40 MB  | Page Faults: 1842 minor, 0 major        │
+     │ Context Switches: 42 voluntary, 8 involuntary                  │
      └────────────────────────────────────────────────────────────────┘
      ```
 2. **Built-in Kernel Inspector (`sysinfo`)**:
-   - Parses Linux `/proc/stat` for aggregate CPU utilization percentage.
-   - Parses `/proc/meminfo` for Total, Free, and Available RAM.
-   - Parses `/proc/loadavg` for 1m, 5m, 15m system load.
+   - Parses Linux `/proc/stat` and `/proc/loadavg` for CPU cores and system load.
+   - Parses `/proc/meminfo` for Total, Free, and Available RAM and Swap.
+   - Parses `/proc/uptime` for system uptime.
    - Outputs a fast, zero-dependency ASCII dashboard.
 
 ### Implementation Checklist
-- [ ] Create `include/telemetry.h` and `src/telemetry.c`.
-- [ ] Implement `time` command interceptor in execution engine.
-- [ ] Implement `sysinfo` built-in command.
-- [ ] Add tests verifying `time` command output structure and exit code retention.
+- [x] Create `include/telemetry.h` and `src/telemetry.c`.
+- [x] Implement `time` command interceptor in execution engine (`lsh_execute_timed`).
+- [x] Implement `sysinfo` built-in command with `/proc` parsing and shell resource telemetry.
+- [x] Add tests verifying `time` command output structure, exit code retention, and pipelines (tests 39-43).
 
 ---
 

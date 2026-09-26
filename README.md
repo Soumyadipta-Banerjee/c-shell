@@ -11,6 +11,9 @@ A high-performance, portfolio-grade Unix shell written in C99 exploring POSIX sy
 ## Key Features
 
 - **Process Management**: Robust lifecycle orchestration using `fork()`, `execvp()`, and `waitpid()`.
+- **Native Systems Observability & Telemetry**:
+  - `time <cmd>`: Command execution profiler intercepting single commands and multi-stage pipelines. Captures wall-clock time (`clock_gettime`), user & system CPU time via kernel `getrusage(RUSAGE_CHILDREN)`, peak resident memory (RSS), minor/major page faults, and voluntary/involuntary context switches without corrupting stdout streams.
+  - `sysinfo`: High-speed, zero-dependency kernel dashboard inspecting CPU cores, aggregate load averages (`/proc/loadavg`), RAM & Swap utilization (`/proc/meminfo`), uptime (`/proc/uptime`), and shell process statistics.
 - **Dynamic Git-Aware Prompt**:
   - Displays `user@hostname:path (git:branch)$` with ANSI styling and tilde (`~`) home shortening.
   - Native zero-subprocess Git branch discovery parsing `.git/HEAD` directly without incurring fork overhead.
@@ -21,6 +24,7 @@ A high-performance, portfolio-grade Unix shell written in C99 exploring POSIX sy
   - `unset KEY`: Unsets environment variables.
   - `env`: Lists active environment variables.
   - `jobs`: Lists active background jobs with status and command details.
+  - `sysinfo`: Renders the live system observability dashboard.
   - `help`: Interactive summary of commands, syntax, and features.
   - `exit [code]`: Exits shell with specified or last status code.
 - **Background Jobs & Reaping**:
@@ -57,16 +61,18 @@ apex-shell/
 │   ├── execute.h      # Process execution, pipelines, and command chaining
 │   ├── jobs.h         # Background job tracking and non-blocking reaping
 │   ├── parser.h       # Tokenization, quoting, prompt, and expansions
-│   └── signals.h      # Signal handlers (SIGINT, SIGTSTP)
+│   ├── signals.h      # Signal handlers (SIGINT, SIGTSTP)
+│   └── telemetry.h    # Observability: time profiler and sysinfo dashboard
 ├── src/
-│   ├── builtins.c     # Implementations of cd, pwd, export, unset, env, jobs, help, exit
+│   ├── builtins.c     # Implementations of cd, pwd, export, unset, env, jobs, sysinfo, help, exit
 │   ├── execute.c      # Execution engine, I/O redirection, and pipelines
 │   ├── jobs.c         # Job list management and zombie process cleanup
 │   ├── main.c         # Interactive REPL shell loop entrypoint
 │   ├── parser.c       # Tokenizer, zero-overhead git discovery, and variable expansion
-│   └── signals.c      # Signal setup and protection
+│   ├── signals.c      # Signal setup and prompt protection
+│   └── telemetry.c    # getrusage profiling and /proc system metrics parser
 ├── tests/
-│   └── test_shell.sh  # Automated test suite (38 test cases)
+│   └── test_shell.sh  # Automated test suite (43 test cases)
 ├── .github/
 │   └── workflows/
 │       └── ci.yml     # Automated CI pipeline
@@ -133,6 +139,13 @@ apex-shell/
 # Git-aware prompt appears automatically in Git repositories:
 # soumya@archlinux:~/apex-shell (git:main)$
 
+# Systems Observability: inspect kernel resources
+sysinfo
+
+# Execution Telemetry: profile any command or pipeline
+time sleep 0.2
+time cat Makefile | grep TARGET | wc -l
+
 # Environment variables
 export PROJECT_NAME=apex-shell
 echo "Welcome to $PROJECT_NAME!"
@@ -170,8 +183,9 @@ exit 0
 
 ## Automated Testing
 
-The project includes an automated test suite ([tests/test_shell.sh](tests/test_shell.sh)) containing **38 test cases** covering:
-- Built-in commands (`pwd`, `cd`, `export`, `unset`, `env`, `jobs`, `help`, `exit [code]`)
+The project includes an automated test suite ([tests/test_shell.sh](tests/test_shell.sh)) containing **43 test cases** covering:
+- Built-in commands (`pwd`, `cd`, `export`, `unset`, `env`, `jobs`, `sysinfo`, `help`, `exit [code]`)
+- Telemetry and Profiling (`time` command rusage metrics, status code preservation, pipeline profiling)
 - Background processes (`&`), job tracking, and asynchronous zombie reaping
 - External command execution
 - Quoting behavior (single and double quotes with whitespace preservation)

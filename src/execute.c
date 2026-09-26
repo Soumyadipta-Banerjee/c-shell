@@ -5,6 +5,7 @@
 #include "builtins.h"
 #include "parser.h"
 #include "jobs.h"
+#include "telemetry.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -375,6 +376,16 @@ int lsh_execute(char **args, int is_bg)
     if (args[0] == NULL)
     {
         return 0;
+    }
+
+    if (strcmp(args[0], "time") == 0)
+    {
+        if (args[1] == NULL)
+        {
+            fprintf(stderr, "time: missing command to profile\nUsage: time <command> [args...]\n");
+            return 1;
+        }
+        return lsh_execute_timed(args + 1, is_bg);
     }
 
     int num_cmds = 1;
