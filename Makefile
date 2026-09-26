@@ -1,15 +1,19 @@
 CC = gcc
-CFLAGS = -Wall -Wextra -pedantic -std=c99 -O2
+CFLAGS = -Wall -Wextra -pedantic -std=c99 -O2 -Iinclude
 TARGET = c-shell
-SRC = shell.c
+SRCS = src/main.c src/builtins.c src/execute.c src/parser.c src/signals.c
+OBJS = $(SRCS:.c=.o)
 
 all: $(TARGET)
 
-$(TARGET): $(SRC)
-	$(CC) $(CFLAGS) -o $(TARGET) $(SRC)
+$(TARGET): $(OBJS)
+	$(CC) $(CFLAGS) -o $@ $(OBJS)
+
+%.o: %.c
+	$(CC) $(CFLAGS) -c $< -o $@
 
 clean:
-	rm -f $(TARGET) my_shell *.o
+	rm -f $(TARGET) my_shell src/*.o *.o
 
 run: all
 	./$(TARGET)

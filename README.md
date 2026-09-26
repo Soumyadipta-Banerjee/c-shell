@@ -27,6 +27,30 @@ A feature-rich Unix shell implementation written in C, exploring process managem
 - **Signal Handling**: Protected interactive prompt against `Ctrl+C` (`SIGINT`) and `Ctrl+Z` (`SIGTSTP`); correctly forwards interruption signals to foreground child processes.
 - **Robust Terminal Handling**: Clean `EOF` / `Ctrl+D` exit and non-interactive pipe detection via `isatty()`.
 
+## Project Structure
+
+```text
+c-shell/
+├── include/
+│   ├── builtins.h     # Built-in declarations and dispatch table
+│   ├── execute.h      # Process execution, pipelines, and command chaining
+│   ├── parser.h       # Tokenization, quoting, line reading, and expansions
+│   └── signals.h      # Signal handlers (SIGINT, SIGTSTP)
+├── src/
+│   ├── builtins.c     # Implementations of cd, pwd, help, exit
+│   ├── execute.c      # Execution engine, I/O redirection, and pipelines
+│   ├── main.c         # Shell loop entrypoint
+│   ├── parser.c       # Tokenizer, dynamic prompt, and variable expansion
+│   └── signals.c      # Signal setup and protection
+├── tests/
+│   └── test_shell.sh  # Automated test suite (30 test cases)
+├── .github/
+│   └── workflows/
+│       └── ci.yml     # Automated CI pipeline
+├── Makefile           # Build and test rules
+└── README.md
+```
+
 ## Getting Started
 
 ### Prerequisites
