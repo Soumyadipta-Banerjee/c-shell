@@ -419,6 +419,36 @@ run_test "Observability: time without command reports usage" \
     "time: missing command to profile" \
     "contains"
 
+# 44. Fuzzy: suggests built-in for typos (pwdd -> pwd)
+run_test "Fuzzy: suggests built-in command (pwdd -> pwd)" \
+    "pwdd" \
+    "Did you mean: 'pwd'?" \
+    "contains"
+
+# 45. Fuzzy: suggests external command for transposition (gti -> git)
+run_test "Fuzzy: suggests PATH command for transposition (gti -> git)" \
+    "gti" \
+    "Did you mean: 'git'?" \
+    "contains"
+
+# 46. Fuzzy: suggests command for deletion typo (clea -> clear)
+run_test "Fuzzy: suggests command for deletion typo (clea -> clear)" \
+    "clea" \
+    "Did you mean: 'clear'?" \
+    "contains"
+
+# 47. Fuzzy: command not found returns POSIX exit code 127
+run_test "Fuzzy: command not found returns exit code 127" \
+    "nonexistentcommand12345 ; echo \$?" \
+    "127" \
+    "contains"
+
+# 48. Fuzzy: unknown command without close match prints no suggestion
+run_test "Fuzzy: completely unknown command outputs error cleanly" \
+    "zzzzqqqq9999" \
+    "apex-shell: 'zzzzqqqq9999' command not found" \
+    "contains"
+
 echo -e "${BLUE}========================================${NC}"
 if [ "$FAILED" -eq 0 ]; then
     echo -e "${GREEN}All $TOTAL tests passed successfully!${NC}"

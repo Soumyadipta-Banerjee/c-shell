@@ -6,6 +6,7 @@
 #include "parser.h"
 #include "jobs.h"
 #include "telemetry.h"
+#include "fuzzy.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -13,6 +14,7 @@
 #include <string.h>
 #include <fcntl.h>
 #include <signal.h>
+#include <errno.h>
 
 int g_last_exit_status = 0;
 int g_should_exit = 0;
@@ -162,9 +164,17 @@ int lsh_launch(char **args, int is_bg)
         }
         if (execvp(args[0], args) == -1)
         {
-            perror("lsh");
+            if (errno == ENOENT)
+            {
+                print_command_not_found(args[0]);
+                exit(127);
+            }
+            else
+            {
+                perror("apex-shell");
+                exit(126);
+            }
         }
-        exit(EXIT_FAILURE);
     }
     else if (pid < 0)
     {
@@ -306,9 +316,17 @@ int lsh_execute_pipeline(char ***cmd_args, int num_cmds, int is_bg)
 
             if (execvp(cmd_args[i][0], cmd_args[i]) == -1)
             {
-                perror("lsh");
+                if (errno == ENOENT)
+                {
+                    print_command_not_found(cmd_args[i][0]);
+                    exit(127);
+                }
+                else
+                {
+                    perror("apex-shell");
+                    exit(126);
+                }
             }
-            exit(EXIT_FAILURE);
         }
         else if (pids[i] < 0)
         {

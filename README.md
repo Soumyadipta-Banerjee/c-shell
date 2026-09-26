@@ -4,13 +4,17 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Standards: C99](https://img.shields.io/badge/C-99-informational.svg)](Makefile)
 
-A high-performance, portfolio-grade Unix shell written in C99 exploring POSIX system calls, process lifecycles, memory safety, dynamic Git prompt integration, and native systems observability.
+A high-performance, portfolio-grade Unix shell written in C99 exploring POSIX system calls, process lifecycles, memory safety, dynamic Git prompt integration, algorithmic intelligence, and native systems observability.
 
 ---
 
 ## Key Features
 
 - **Process Management**: Robust lifecycle orchestration using `fork()`, `execvp()`, and `waitpid()`.
+- **Algorithmic Intelligence ("Did You Mean?" Suggestions)**:
+  - High-performance Damerau-Levenshtein distance algorithm with transposition, deletion, insertion, and substitution handling.
+  - Automatically triggered when `execvp` fails with `ENOENT`. Scans built-in commands and binaries in `$PATH` to suggest the closest match (`gti` $\to$ `git`, `pwdd` $\to$ `pwd`, `clea` $\to$ `clear`, `sl` $\to$ `ls`).
+  - Conforms to POSIX convention returning exit status 127 for unknown commands.
 - **Native Systems Observability & Telemetry**:
   - `time <cmd>`: Command execution profiler intercepting single commands and multi-stage pipelines. Captures wall-clock time (`clock_gettime`), user & system CPU time via kernel `getrusage(RUSAGE_CHILDREN)`, peak resident memory (RSS), minor/major page faults, and voluntary/involuntary context switches without corrupting stdout streams.
   - `sysinfo`: High-speed, zero-dependency kernel dashboard inspecting CPU cores, aggregate load averages (`/proc/loadavg`), RAM & Swap utilization (`/proc/meminfo`), uptime (`/proc/uptime`), and shell process statistics.
@@ -59,6 +63,7 @@ apex-shell/
 ├── include/
 │   ├── builtins.h     # Built-in declarations and dispatch table
 │   ├── execute.h      # Process execution, pipelines, and command chaining
+│   ├── fuzzy.h        # Damerau-Levenshtein distance & command suggestions
 │   ├── jobs.h         # Background job tracking and non-blocking reaping
 │   ├── parser.h       # Tokenization, quoting, prompt, and expansions
 │   ├── signals.h      # Signal handlers (SIGINT, SIGTSTP)
@@ -66,13 +71,14 @@ apex-shell/
 ├── src/
 │   ├── builtins.c     # Implementations of cd, pwd, export, unset, env, jobs, sysinfo, help, exit
 │   ├── execute.c      # Execution engine, I/O redirection, and pipelines
+│   ├── fuzzy.c        # Typo correction and PATH binary candidate discovery
 │   ├── jobs.c         # Job list management and zombie process cleanup
 │   ├── main.c         # Interactive REPL shell loop entrypoint
 │   ├── parser.c       # Tokenizer, zero-overhead git discovery, and variable expansion
 │   ├── signals.c      # Signal setup and prompt protection
 │   └── telemetry.c    # getrusage profiling and /proc system metrics parser
 ├── tests/
-│   └── test_shell.sh  # Automated test suite (43 test cases)
+│   └── test_shell.sh  # Automated test suite (48 test cases)
 ├── .github/
 │   └── workflows/
 │       └── ci.yml     # Automated CI pipeline
@@ -139,6 +145,15 @@ apex-shell/
 # Git-aware prompt appears automatically in Git repositories:
 # soumya@archlinux:~/apex-shell (git:main)$
 
+# Algorithmic Intelligence: catches typos and suggests fixes
+$ gti status
+apex-shell: 'gti' command not found
+Did you mean: 'git'?
+
+$ pwdd
+apex-shell: 'pwdd' command not found
+Did you mean: 'pwd'?
+
 # Systems Observability: inspect kernel resources
 sysinfo
 
@@ -183,9 +198,10 @@ exit 0
 
 ## Automated Testing
 
-The project includes an automated test suite ([tests/test_shell.sh](tests/test_shell.sh)) containing **43 test cases** covering:
+The project includes an automated test suite ([tests/test_shell.sh](tests/test_shell.sh)) containing **48 test cases** covering:
+- Algorithmic Intelligence (Damerau-Levenshtein fuzzy matching, built-in and PATH typo suggestions, exit 127)
+- Systems Observability & Telemetry (`time` command rusage profiler, status preservation, `sysinfo` dashboard)
 - Built-in commands (`pwd`, `cd`, `export`, `unset`, `env`, `jobs`, `sysinfo`, `help`, `exit [code]`)
-- Telemetry and Profiling (`time` command rusage metrics, status code preservation, pipeline profiling)
 - Background processes (`&`), job tracking, and asynchronous zombie reaping
 - External command execution
 - Quoting behavior (single and double quotes with whitespace preservation)

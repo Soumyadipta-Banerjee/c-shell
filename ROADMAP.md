@@ -113,11 +113,11 @@ Enhance developer experience by catching typos with algorithmic fuzzy matching.
      ```
 
 ### Implementation Checklist
-- [ ] Create `include/fuzzy.h` and `src/fuzzy.c`.
-- [ ] Implement `size_t levenshtein_distance(const char *s1, const char *s2)`.
-- [ ] Implement candidate finder scanning built-ins and `$PATH`.
-- [ ] Connect into error path when `execvp` fails with `ENOENT`.
-- [ ] Add automated tests asserting suggestions on common typos (`gti` -> `git`, `clea` -> `clear`).
+- [x] Create `include/fuzzy.h` and `src/fuzzy.c`.
+- [x] Implement Damerau-Levenshtein distance algorithm with transposition support.
+- [x] Implement candidate finder scanning built-ins and `$PATH` with intelligent tie-breaking.
+- [x] Connect into error path when `execvp` fails with `ENOENT` returning exit status 127.
+- [x] Add automated tests asserting suggestions on common typos (`gti` -> `git`, `pwdd` -> `pwd`, `clea` -> `clear`, tests 44-48).
 
 ---
 

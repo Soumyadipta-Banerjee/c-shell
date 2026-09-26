@@ -58,6 +58,7 @@ This document details the architectural layout, component boundaries, execution 
 | **Built-ins** | `include/builtins.h` | `src/builtins.c` | In-process commands that modify shell state (`cd`, `exit`, `pwd`, `help`, `jobs`, and future `export`, `unset`, `alias`). |
 | **Job Control** | `include/jobs.h` | `src/jobs.c` | Background task tracking linked list, non-blocking asynchronous zombie reaping (`waitpid` with `WNOHANG`), and job status formatting. |
 | **Telemetry & Observability** | `include/telemetry.h` | `src/telemetry.c` | Process profiling (`getrusage`, `clock_gettime`), execution telemetry interceptor (`time`), and `/proc` system resource dashboard (`sysinfo`). |
+| **Algorithmic Intelligence** | `include/fuzzy.h` | `src/fuzzy.c` | Damerau-Levenshtein distance calculation, typo correction, and PATH executable candidate discovery on `ENOENT`. |
 | **Signal Handling** | `include/signals.h` | `src/signals.c` | POSIX `sigaction` registration for `SIGINT` and `SIGTSTP`, shielding the interactive prompt and delegating signals to foreground child processes. |
 
 ---
