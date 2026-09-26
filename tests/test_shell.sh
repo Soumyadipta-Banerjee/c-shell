@@ -520,6 +520,56 @@ history 1" \
     "history 1" \
     "contains"
 
+# 55. Aliases: define and execute alias
+run_test "Aliases: define and execute alias" \
+    "alias greet='echo HelloApex'
+greet" \
+    "HelloApex" \
+    "exact"
+
+# 56. Aliases: list active aliases
+run_test "Aliases: list active aliases" \
+    "alias myecho='echo'
+alias" \
+    "alias myecho='echo'" \
+    "contains"
+
+# 57. Aliases: unalias removes alias
+run_test "Aliases: unalias removes alias" \
+    "alias temp='echo Temp'
+unalias temp
+temp" \
+    "apex-shell: 'temp' command not found" \
+    "contains"
+
+# 58. Aliases: alias with trailing arguments
+printf "SampleContent\n" > "$TEST_DIR/sample.txt"
+run_test "Aliases: alias with trailing arguments" \
+    "alias show='cat'
+show sample.txt" \
+    "SampleContent" \
+    "exact"
+
+# 59. Safety Shield: safemode displays status
+run_test "Safety Shield: safemode displays status" \
+    "safemode" \
+    "Safety Shield: ENABLED" \
+    "contains"
+
+# 60. Safety Shield: blocks dangerous recursive deletion
+run_test "Safety Shield: blocks dangerous rm -rf /" \
+    "rm -rf /" \
+    "Blocked destructive recursive deletion on '/'" \
+    "contains"
+
+# 61. Safety Shield: toggle off and on
+run_test "Safety Shield: toggle off and on" \
+    "safemode off
+safemode on" \
+    "Safety Shield: DISABLED
+Safety Shield: ENABLED" \
+    "exact"
+
 echo -e "${BLUE}========================================${NC}"
 if [ "$FAILED" -eq 0 ]; then
     echo -e "${GREEN}All $TOTAL tests passed successfully!${NC}"

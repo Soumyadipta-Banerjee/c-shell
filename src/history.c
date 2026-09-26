@@ -114,6 +114,20 @@ void history_cleanup(void)
     history_count = 0;
 }
 
+int history_get_count(void)
+{
+    return history_count;
+}
+
+const char *history_get_item(int index)
+{
+    if (index >= 0 && index < history_count)
+    {
+        return history_items[index];
+    }
+    return NULL;
+}
+
 int lsh_history(char **args)
 {
     if (args[1] != NULL && strcmp(args[1], "-c") == 0)

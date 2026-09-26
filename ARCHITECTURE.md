@@ -60,6 +60,9 @@ This document details the architectural layout, component boundaries, execution 
 | **Telemetry & Observability** | `include/telemetry.h` | `src/telemetry.c` | Process profiling (`getrusage`, `clock_gettime`), execution telemetry interceptor (`time`), and `/proc` system resource dashboard (`sysinfo`). |
 | **Algorithmic Intelligence** | `include/fuzzy.h` | `src/fuzzy.c` | Damerau-Levenshtein distance calculation, typo correction, and PATH executable candidate discovery on `ENOENT`. |
 | **History & Scripting** | `include/history.h` | `src/history.c`, `src/main.c` | Script file parsing (`.apex`), one-liner execution (`-c`), command history recording, and `~/.apex_history` persistence. |
+| **Interactive Line Editor** | `include/linereader.h` | `src/linereader.c` | Raw terminal mode (`termios`), cursor navigation, history traversal, and Tab autocompletion for built-ins and paths. |
+| **Command Aliases** | `include/alias.h` | `src/alias.c` | In-memory alias mapping table, recursion-safe token expansion in executor, `alias` and `unalias` built-ins. |
+| **Safety Shield** | `include/safety.h` | `src/safety.c` | Proactive interception of destructive commands (`rm -rf /`, `~`), confirmation prompt, and `safemode` control. |
 | **Signal Handling** | `include/signals.h` | `src/signals.c` | POSIX `sigaction` registration for `SIGINT` and `SIGTSTP`, shielding the interactive prompt and delegating signals to foreground child processes. |
 
 ---
@@ -88,6 +91,28 @@ typedef struct Job {
 ```
 * **Concurrency Safety**: Background jobs are reaped synchronously inside `jobs_reap()` at the start of each REPL cycle and before executing built-ins like `jobs`. This avoids async-signal-safety violations (e.g. calling `printf` or `malloc`/`free` inside a `SIGCHLD` handler).
 * **ID Compaction**: When the job list empties out completely, `next_job_id` resets back to 1.
+
+### 3.3 Alias Mapping Table (`Alias`)
+```c
+typedef struct Alias {
+    char *name;          // Alias trigger token (e.g., "ll", "gco")
+    char *value;         // Expanded command string (e.g., "ls -la", "git checkout")
+    struct Alias *next;  // Singly linked list pointer
+} Alias;
+```
+* **Recursion Guard**: Expansion tracks expansion depth or identity matching to prevent infinite loops when an alias aliases itself (e.g. `alias ls='ls --color=auto'`).
+* **Substitution Timing**: Intercepted in `lsh_execute()`: if `args[0]` matches an alias, it is replaced and recursively repacked before built-in or external execution.
+
+### 3.4 Interactive Line Editor & Autocompletion
+* **Raw Termios State**: When `isatty(STDIN_FILENO)` is true, the shell configures the terminal into raw mode (`ICANON`, `ECHO`, `ISIG` disabled) with `VMIN=1` and `VTIME=0`.
+* **Fallback Guarantee**: In non-interactive contexts (pipes, redirection, scripts), `lsh_read_interactive_line()` falls back to standard `lsh_read_line()` with zero terminal escape overhead.
+* **Autocompletion**: Intercepts `\t` (Tab). Scans registered built-in commands and the current working directory via `opendir`/`readdir`. If a unique candidate is found, completes inline; if multiple candidates share a prefix, completes the longest common prefix.
+
+### 3.5 Proactive Safety Shield (`Safety Shield`)
+* **Destructive Command Interception**: Intercepts `rm` invocations containing recursive flags (`-r`, `-R`, `--recursive`).
+* **Critical Barriers**: Protects `/`, `/*`, `~`, `$HOME`, `.`, `..`, and bare `*`.
+* **Interactive vs Automated**: Prompts the user with `[y/N]` confirmation in interactive mode. Under non-interactive mode or automated scripts, execution is blocked with exit code 1 to protect the host machine.
+* **Runtime Toggle**: Configurable at runtime via `safemode on`, `safemode off`, or `safemode status`.
 
 ---
 

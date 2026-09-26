@@ -10,6 +10,21 @@ A high-performance, portfolio-grade Unix shell written in C99 exploring POSIX sy
 
 ## Key Features
 
+- **Interactive Line Editing & Tab Autocompletion**:
+  - Direct raw terminal control (`termios`) with zero escape sequence corruption.
+  - Left / Right arrow cursor repositioning, Home (`Ctrl+A`), End (`Ctrl+E`), Backspace, and Delete.
+  - Up / Down arrow history browsing cycling through session commands.
+  - Tab (`\t`) autocompletion for built-in commands and filesystem paths (directories complete with `/`).
+  - Screen clear (`Ctrl+L`), interrupt (`Ctrl+C`), and EOF (`Ctrl+D`) support.
+- **Proactive Safety Shield (`safemode`)**:
+  - Real-time command interception preventing catastrophic accidental deletions (`rm -rf /`, `rm -rf /*`, `rm -rf ~`, `rm -rf *`, etc.).
+  - Interactive mode prompts for user confirmation `[y/N]` before proceeding; scripted or non-interactive execution immediately blocks execution with exit status 1.
+  - Built-in `safemode [on|off|status]` to inspect or toggle guardrails at runtime.
+- **User-Defined Command Aliases (`alias` & `unalias`)**:
+  - `alias name='command'`: Create custom shortcuts with transparent argument passthrough.
+  - `alias`: Prints all active aliases in clean `alias name='command'` format.
+  - `unalias name` / `unalias -a`: Remove individual aliases or clear the entire alias table.
+  - Built-in recursion guard prevents cyclic alias loops.
 - **Process Management**: Robust lifecycle orchestration using `fork()`, `execvp()`, and `waitpid()`.
 - **Scripting & Non-Interactive Execution**:
   - `apex-shell -c "commands"`: Executes inline one-liners with command chaining, redirections, and pipelines, exiting with the exact status code.
@@ -35,6 +50,9 @@ A high-performance, portfolio-grade Unix shell written in C99 exploring POSIX sy
   - `export KEY=VALUE`: Sets environment variables for the shell and child processes.
   - `unset KEY`: Unsets environment variables.
   - `env`: Lists active environment variables.
+  - `alias [name='val']`: Sets or lists user-defined command aliases.
+  - `unalias [name|-a]`: Removes specific or all command aliases.
+  - `safemode [on|off|status]`: Configures or inspects the accidental deletion shield.
   - `jobs`: Lists active background jobs with status and command details.
   - `sysinfo`: Renders the live system observability dashboard.
   - `history`: Displays or clears command history.
@@ -70,26 +88,32 @@ A high-performance, portfolio-grade Unix shell written in C99 exploring POSIX sy
 ```text
 apex-shell/
 ├── include/
+│   ├── alias.h        # Command alias table and expansion declarations
 │   ├── builtins.h     # Built-in declarations and dispatch table
 │   ├── execute.h      # Process execution, pipelines, and command chaining
 │   ├── fuzzy.h        # Damerau-Levenshtein distance & command suggestions
 │   ├── history.h      # Command history and persistent serialization
 │   ├── jobs.h         # Background job tracking and non-blocking reaping
+│   ├── linereader.h   # Raw termios line editing and tab autocompletion
 │   ├── parser.h       # Tokenization, quoting, prompt, and expansions
+│   ├── safety.h       # Proactive safety shield against destructive commands
 │   ├── signals.h      # Signal handlers (SIGINT, SIGTSTP)
 │   └── telemetry.h    # Observability: time profiler and sysinfo dashboard
 ├── src/
-│   ├── builtins.c     # Implementations of cd, pwd, export, unset, env, jobs, sysinfo, history, help, exit
-│   ├── execute.c      # Execution engine, I/O redirection, and pipelines
+│   ├── alias.c        # Alias dictionary and recursive-safe substitution
+│   ├── builtins.c     # Implementations of cd, pwd, export, unset, env, alias, unalias, safemode, jobs, sysinfo, history, help, exit
+│   ├── execute.c      # Execution engine, I/O redirection, pipelines, and hooks
 │   ├── fuzzy.c        # Typo correction and PATH binary candidate discovery
 │   ├── history.c      # In-memory history buffer and file persistence (~/.apex_history)
 │   ├── jobs.c         # Job list management and zombie process cleanup
+│   ├── linereader.c   # Raw termios engine, cursor motion, and tab autocompletion
 │   ├── main.c         # REPL loop, script execution (.apex), and -c execution
 │   ├── parser.c       # Tokenizer, zero-overhead git discovery, and variable expansion
+│   ├── safety.c       # Destructive command interception and safemode engine
 │   ├── signals.c      # Signal setup and prompt protection
 │   └── telemetry.c    # getrusage profiling and /proc system metrics parser
 ├── tests/
-│   └── test_shell.sh  # Automated test suite (54 test cases)
+│   └── test_shell.sh  # Automated test suite (61 test cases)
 ├── .github/
 │   └── workflows/
 │       └── ci.yml     # Automated CI pipeline
@@ -186,6 +210,25 @@ sysinfo
 time sleep 0.2
 time cat Makefile | grep TARGET | wc -l
 
+# User-Defined Command Aliases
+alias ll='ls -la'
+alias gco='git checkout'
+alias
+ll /tmp
+unalias ll
+
+# Proactive Safety Shield
+safemode status
+safemode on
+rm -rf /               # Intercepted and blocked: Dangerous deletion prevented!
+safemode off
+
+# Interactive Line Editing & Autocompletion (in terminal)
+# [Tab] completes built-in commands and file paths
+# [Up/Down] arrows browse previous command history
+# [Left/Right] arrows navigate input buffer
+# [Ctrl+L] clears screen, [Ctrl+C] discards current line
+
 # Environment variables
 export PROJECT_NAME=apex-shell
 echo "Welcome to $PROJECT_NAME!"
@@ -223,12 +266,15 @@ exit 0
 
 ## Automated Testing
 
-The project includes an automated test suite ([tests/test_shell.sh](tests/test_shell.sh)) containing **54 test cases** covering:
+The project includes an automated test suite ([tests/test_shell.sh](tests/test_shell.sh)) containing **61 test cases** covering:
+- Interactive Line Editing & Autocompletion (`termios` raw mode, buffer traversal, tab completion)
+- Command Aliases (`alias`, `unalias`, recursive prevention, argument passing)
+- Proactive Safety Shield (`safemode`, catastrophic `rm` command blocking, confirmation checks)
 - Scripting & One-Liners (`-c` execution, `.apex` file execution, `#` comment ignoring, exit codes)
 - Persistent History (`history` built-in, numerical limits, serialization)
 - Algorithmic Intelligence (Damerau-Levenshtein fuzzy matching, built-in and PATH typo suggestions, exit 127)
 - Systems Observability & Telemetry (`time` command rusage profiler, status preservation, `sysinfo` dashboard)
-- Built-in commands (`pwd`, `cd`, `export`, `unset`, `env`, `jobs`, `sysinfo`, `history`, `help`, `exit [code]`)
+- Built-in commands (`pwd`, `cd`, `export`, `unset`, `env`, `alias`, `unalias`, `safemode`, `jobs`, `sysinfo`, `history`, `help`, `exit [code]`)
 - Background processes (`&`), job tracking, and asynchronous zombie reaping
 - External command execution
 - Quoting behavior (single and double quotes with whitespace preservation)

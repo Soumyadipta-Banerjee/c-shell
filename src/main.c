@@ -6,6 +6,9 @@
 #include "execute.h"
 #include "jobs.h"
 #include "history.h"
+#include "alias.h"
+#include "safety.h"
+#include "linereader.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -21,7 +24,7 @@ void lsh_loop(void)
     {
         jobs_reap();
         lsh_print_prompt();
-        line = lsh_read_line();
+        line = lsh_read_interactive_line();
         if (line == NULL)
         {
             if (isatty(STDIN_FILENO))
@@ -91,6 +94,8 @@ int main(int argc, char **argv)
 {
     jobs_init();
     lsh_init_signals();
+    alias_init();
+    safety_init();
 
     if (argc >= 3 && strcmp(argv[1], "-c") == 0)
     {
@@ -108,6 +113,7 @@ int main(int argc, char **argv)
         history_cleanup();
     }
 
+    alias_cleanup();
     jobs_cleanup();
     return g_last_exit_status;
 }

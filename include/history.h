@@ -15,6 +15,12 @@ void history_save(void);
 /* Clean up history memory */
 void history_cleanup(void);
 
+/* Get number of history entries */
+int history_get_count(void);
+
+/* Get history item by 0-based index */
+const char *history_get_item(int index);
+
 /* Built-in history command */
 int lsh_history(char **args);
 

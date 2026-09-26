@@ -7,6 +7,8 @@
 #include "jobs.h"
 #include "telemetry.h"
 #include "fuzzy.h"
+#include "safety.h"
+#include "alias.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -389,11 +391,63 @@ int lsh_execute_pipeline(char ***cmd_args, int num_cmds, int is_bg)
     return last_status;
 }
 
+static int s_alias_depth = 0;
+
 int lsh_execute(char **args, int is_bg)
 {
     if (args[0] == NULL)
     {
         return 0;
+    }
+
+    // Alias expansion
+    if (s_alias_depth < 10)
+    {
+        const char *alias_val = alias_get(args[0]);
+        if (alias_val != NULL)
+        {
+            s_alias_depth++;
+            ShellToken **alias_tokens = lsh_split_line((char *)alias_val);
+            int a_count = 0;
+            while (alias_tokens[a_count] != NULL)
+            {
+                a_count++;
+            }
+
+            int orig_count = 0;
+            while (args[orig_count] != NULL)
+            {
+                orig_count++;
+            }
+
+            char **new_args = malloc(sizeof(char *) * (a_count + orig_count));
+            if (new_args)
+            {
+                for (int i = 0; i < a_count; i++)
+                {
+                    new_args[i] = alias_tokens[i]->text;
+                }
+                for (int i = 1; i < orig_count; i++)
+                {
+                    new_args[a_count + i - 1] = args[i];
+                }
+                new_args[a_count + orig_count - 1] = NULL;
+
+                int res = lsh_execute(new_args, is_bg);
+                free(new_args);
+                lsh_free_tokens(alias_tokens);
+                s_alias_depth--;
+                return res;
+            }
+            lsh_free_tokens(alias_tokens);
+            s_alias_depth--;
+        }
+    }
+
+    // Safety Shield check
+    if (safety_check_command(args) != 0)
+    {
+        return 1;
     }
 
     if (strcmp(args[0], "time") == 0)

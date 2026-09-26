@@ -147,21 +147,27 @@ Enable writing and executing shell scripts, inline `-c` execution, and persisten
 
 ---
 
-## Phase 5: Interactive Line Editing & Autocompletion (Linenoise)
+## Phase 5: Interactive Line Editing & Autocompletion
 
 ### Objectives
-Provide full interactive terminal ergonomics without escape-code corruption.
+Provide full interactive terminal ergonomics without escape-code corruption, powered by raw termios and tab autocompletion.
 
 ### Requirements & Specifications
-1. **Linenoise Integration**:
-   - Embed lightweight, single-file line editor library.
-   - Support:
-     - Left/Right arrow cursor movement.
-     - Up/Down history traversal.
-     - Home/End key support.
+1. **Interactive Line Editor**:
+   - Left/Right arrow cursor movement.
+   - Up/Down history traversal through recorded session commands.
+   - Home/End key support.
+   - Backspace, Delete, Ctrl+C, Ctrl+D, and Ctrl+L screen clear.
 2. **Tab Autocompletion**:
-   - File path completion: crawl current directory and complete subpaths.
-   - Command completion: complete built-ins and executables in `$PATH`.
+   - File path completion: crawl current directory and complete subpaths and directories (with trailing `/`).
+   - Command completion: complete built-ins and executables.
+   - Longest common prefix completion for multiple candidates.
+
+### Implementation Checklist
+- [x] Create `include/linereader.h` and `src/linereader.c`.
+- [x] Implement raw termios handling, escape sequence parser, and cursor repositioning.
+- [x] Implement Tab autocompletion for built-ins and directory paths.
+- [x] Integrate cleanly into `src/main.c` with zero impact on non-interactive pipelines.
 
 ---
 
@@ -172,13 +178,19 @@ Protect users from catastrophic accidental commands and provide user-defined ali
 
 ### Requirements & Specifications
 1. **Accidental Deletion Guard (`safemode`)**:
-   - Check if command is `rm` with flags containing `-r` or `-f`:
-     - If targeting `/`, `/*`, `*`, or current working directory:
-       Prompt with confirmation dialog:
-       `⚠️  [SAFETY GUARD] Destructive command detected! Type 'yes' to proceed: `
+   - Intercept destructive `rm` commands targeting root (`/`, `/*`), home (`~`, `$HOME`), or recursive directories.
+   - Prompt with confirmation in interactive mode or block in scripted mode.
+   - `safemode [on|off|status]` built-in command.
 2. **Command Aliases (`alias` & `unalias`)**:
    - `alias name='command'`: Stores mapping in alias table.
    - Transparently substitute matching tokens during command expansion.
+   - `unalias name` / `unalias -a`: Remove aliases.
+
+### Implementation Checklist
+- [x] Create `include/alias.h` and `src/alias.c`.
+- [x] Create `include/safety.h` and `src/safety.c`.
+- [x] Implement alias expansion and safety guard checks in `src/execute.c`.
+- [x] Add automated tests for aliases, unalias, and safemode (tests 55-61).
 
 ---
 

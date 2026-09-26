@@ -6,6 +6,8 @@
 #include "jobs.h"
 #include "telemetry.h"
 #include "history.h"
+#include "alias.h"
+#include "safety.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -23,7 +25,10 @@ char *builtin_str[] = {
     "unset",
     "env",
     "sysinfo",
-    "history"
+    "history",
+    "alias",
+    "unalias",
+    "safemode"
 };
 
 int (*builtin_func[])(char **) = {
@@ -36,7 +41,10 @@ int (*builtin_func[])(char **) = {
     &lsh_unset,
     &lsh_env,
     &lsh_sysinfo,
-    &lsh_history
+    &lsh_history,
+    &lsh_alias,
+    &lsh_unalias,
+    &lsh_safemode
 };
 
 int lsh_num_builtins(void)
@@ -91,6 +99,8 @@ int lsh_help(char **args)
         printf("  %s\n", builtin_str[i]);
     }
     printf("\nFeatures supported:\n");
+    printf("  - Safety Shield:    safemode [on|off|status] (blocks rm -rf / or dangerous targets)\n");
+    printf("  - Aliases:          alias name='val', unalias name\n");
     printf("  - Observability:    time <cmd> (rusage profiler), sysinfo (proc dashboard)\n");
     printf("  - Intelligence:     Did-you-mean suggestions on command typos\n");
     printf("  - Scripting:        apex-shell script.apex or apex-shell -c \"commands\"\n");

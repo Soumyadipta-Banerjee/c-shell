@@ -12,6 +12,9 @@ int lsh_unset(char **args);
 int lsh_env(char **args);
 int lsh_sysinfo(char **args);
 int lsh_history(char **args);
+int lsh_alias(char **args);
+int lsh_unalias(char **args);
+int lsh_safemode(char **args);
 
 int lsh_num_builtins(void);
 
