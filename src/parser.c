@@ -8,7 +8,65 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
+#include <ctype.h>
 #include <errno.h>
+
+static char *get_git_branch(void)
+{
+    char cwd[1024];
+    if (!getcwd(cwd, sizeof(cwd)))
+    {
+        return NULL;
+    }
+
+    char dir[1024];
+    strncpy(dir, cwd, sizeof(dir));
+
+    while (1)
+    {
+        char head_path[1200];
+        snprintf(head_path, sizeof(head_path), "%s/.git/HEAD", dir);
+
+        FILE *f = fopen(head_path, "r");
+        if (f)
+        {
+            char line[256];
+            if (fgets(line, sizeof(line), f))
+            {
+                fclose(f);
+                line[strcspn(line, "\r\n")] = '\0';
+                const char *ref_prefix = "ref: refs/heads/";
+                if (strncmp(line, ref_prefix, strlen(ref_prefix)) == 0)
+                {
+                    return strdup(line + strlen(ref_prefix));
+                }
+                else
+                {
+                    char short_hash[8];
+                    strncpy(short_hash, line, 7);
+                    short_hash[7] = '\0';
+                    return strdup(short_hash);
+                }
+            }
+            fclose(f);
+        }
+
+        if (strcmp(dir, "/") == 0)
+        {
+            break;
+        }
+        char *last_slash = strrchr(dir, '/');
+        if (!last_slash || last_slash == dir)
+        {
+            strcpy(dir, "/");
+        }
+        else
+        {
+            *last_slash = '\0';
+        }
+    }
+    return NULL;
+}
 
 void lsh_print_prompt(void)
 {
@@ -42,14 +100,165 @@ void lsh_print_prompt(void)
         {
             snprintf(display_cwd, sizeof(display_cwd), "%s", cwd);
         }
-        // Bold green for user@host, bold blue for cwd
-        printf("\033[1;32m%s@%s\033[0m:\033[1;34m%s\033[0m$ ", user, hostname, display_cwd);
+
+        char *git_branch = get_git_branch();
+        if (git_branch)
+        {
+            // Bold green for user@host, bold blue for cwd, bold cyan for git branch
+            printf("\033[1;32m%s@%s\033[0m:\033[1;34m%s\033[0m \033[1;36m(git:%s)\033[0m$ ",
+                   user, hostname, display_cwd, git_branch);
+            free(git_branch);
+        }
+        else
+        {
+            printf("\033[1;32m%s@%s\033[0m:\033[1;34m%s\033[0m$ ", user, hostname, display_cwd);
+        }
     }
     else
     {
         printf("> ");
     }
     fflush(stdout);
+}
+
+static char *expand_variables_in_string(const char *str)
+{
+    size_t cap = strlen(str) + 64;
+    size_t len = 0;
+    char *out = malloc(cap);
+    if (!out)
+    {
+        return NULL;
+    }
+
+    const char *p = str;
+    while (*p)
+    {
+        if (*p == '$')
+        {
+            p++;
+            if (*p == '?')
+            {
+                p++;
+                char buf[16];
+                snprintf(buf, sizeof(buf), "%d", g_last_exit_status);
+                size_t blen = strlen(buf);
+                while (len + blen + 1 > cap)
+                {
+                    cap *= 2;
+                    char *new_out = realloc(out, cap);
+                    if (!new_out) { free(out); return NULL; }
+                    out = new_out;
+                }
+                memcpy(out + len, buf, blen);
+                len += blen;
+            }
+            else if (*p == '$')
+            {
+                p++;
+                char buf[16];
+                snprintf(buf, sizeof(buf), "%d", (int)getpid());
+                size_t blen = strlen(buf);
+                while (len + blen + 1 > cap)
+                {
+                    cap *= 2;
+                    char *new_out = realloc(out, cap);
+                    if (!new_out) { free(out); return NULL; }
+                    out = new_out;
+                }
+                memcpy(out + len, buf, blen);
+                len += blen;
+            }
+            else if (*p == '{')
+            {
+                p++; // skip '{'
+                const char *start = p;
+                while (*p && *p != '}')
+                {
+                    p++;
+                }
+                size_t var_len = p - start;
+                char var_name[256];
+                if (var_len < sizeof(var_name))
+                {
+                    strncpy(var_name, start, var_len);
+                    var_name[var_len] = '\0';
+                    char *val = getenv(var_name);
+                    if (val)
+                    {
+                        size_t vlen = strlen(val);
+                        while (len + vlen + 1 > cap)
+                        {
+                            cap *= 2;
+                            char *new_out = realloc(out, cap);
+                            if (!new_out) { free(out); return NULL; }
+                            out = new_out;
+                        }
+                        memcpy(out + len, val, vlen);
+                        len += vlen;
+                    }
+                }
+                if (*p == '}')
+                {
+                    p++; // skip '}'
+                }
+            }
+            else if (isalpha((unsigned char)*p) || *p == '_')
+            {
+                const char *start = p;
+                while (isalnum((unsigned char)*p) || *p == '_')
+                {
+                    p++;
+                }
+                size_t var_len = p - start;
+                char var_name[256];
+                if (var_len < sizeof(var_name))
+                {
+                    strncpy(var_name, start, var_len);
+                    var_name[var_len] = '\0';
+                    char *val = getenv(var_name);
+                    if (val)
+                    {
+                        size_t vlen = strlen(val);
+                        while (len + vlen + 1 > cap)
+                        {
+                            cap *= 2;
+                            char *new_out = realloc(out, cap);
+                            if (!new_out) { free(out); return NULL; }
+                            out = new_out;
+                        }
+                        memcpy(out + len, val, vlen);
+                        len += vlen;
+                    }
+                }
+            }
+            else
+            {
+                // Standalone '$' without a variable name
+                if (len + 2 > cap)
+                {
+                    cap *= 2;
+                    char *new_out = realloc(out, cap);
+                    if (!new_out) { free(out); return NULL; }
+                    out = new_out;
+                }
+                out[len++] = '$';
+            }
+        }
+        else
+        {
+            if (len + 2 > cap)
+            {
+                cap *= 2;
+                char *new_out = realloc(out, cap);
+                if (!new_out) { free(out); return NULL; }
+                out = new_out;
+            }
+            out[len++] = *p++;
+        }
+    }
+    out[len] = '\0';
+    return out;
 }
 
 char *expand_token(const ShellToken *tok)
@@ -59,24 +268,32 @@ char *expand_token(const ShellToken *tok)
         return strdup(tok->text);
     }
 
-    if (strcmp(tok->text, "$?") == 0)
+    char *intermediate = NULL;
+    // Tilde expansion: ~ or ~/path
+    if (tok->text[0] == '~' && (tok->text[1] == '/' || tok->text[1] == '\0'))
     {
-        char buf[16];
-        snprintf(buf, sizeof(buf), "%d", g_last_exit_status);
-        return strdup(buf);
-    }
-
-    if (tok->text[0] == '$' && tok->text[1] != '\0')
-    {
-        char *val = getenv(tok->text + 1);
-        if (val)
+        char *home = getenv("HOME");
+        if (home)
         {
-            return strdup(val);
+            size_t home_len = strlen(home);
+            size_t rest_len = strlen(tok->text + 1);
+            intermediate = malloc(home_len + rest_len + 1);
+            if (intermediate)
+            {
+                strcpy(intermediate, home);
+                strcat(intermediate, tok->text + 1);
+            }
         }
-        return strdup("");
     }
 
-    return strdup(tok->text);
+    if (!intermediate)
+    {
+        intermediate = strdup(tok->text);
+    }
+
+    char *expanded = expand_variables_in_string(intermediate);
+    free(intermediate);
+    return expanded ? expanded : strdup("");
 }
 
 #define LSH_TOK_BUFSIZE 64

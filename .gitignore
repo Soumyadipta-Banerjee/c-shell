@@ -1,10 +1,12 @@
 # Binaries
+apex-shell
 c-shell
 my_shell
 *.o
 *.out
 
 # Object files
+src/*.o
 *.o
 
 # Editor files

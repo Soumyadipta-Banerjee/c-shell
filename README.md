@@ -1,98 +1,116 @@
-# c-shell
+# Apex Shell (`apex-shell`)
 
-A feature-rich Unix shell implementation written in C, exploring process management, inter-process communication (IPC), system calls, and the POSIX API.
+[![CI](https://github.com/Soumyadipta-Banerjee/apex-shell/actions/workflows/ci.yml/badge.svg)](https://github.com/Soumyadipta-Banerjee/apex-shell/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Standards: C99](https://img.shields.io/badge/C-99-informational.svg)](Makefile)
 
-## Features
+A high-performance, portfolio-grade Unix shell written in C99 exploring POSIX system calls, process lifecycles, memory safety, dynamic Git prompt integration, and native systems observability.
 
-- **Process Management**: Uses `fork()`, `execvp()`, and `waitpid()` for child process lifecycle management.
-- **Dynamic Colorful Prompt**: Displays `user@hostname:path$` with ANSI styling and tilde (`~`) shortening for the home directory.
+---
+
+## Key Features
+
+- **Process Management**: Robust lifecycle orchestration using `fork()`, `execvp()`, and `waitpid()`.
+- **Dynamic Git-Aware Prompt**:
+  - Displays `user@hostname:path (git:branch)$` with ANSI styling and tilde (`~`) home shortening.
+  - Native zero-subprocess Git branch discovery parsing `.git/HEAD` directly without incurring fork overhead.
 - **Built-in Commands**:
-  - `cd [dir]`: Changes directory (defaults to `$HOME` if no path or `~` is given).
+  - `cd [dir]`: Changes directory (supports `~`, no args defaults to `$HOME`).
   - `pwd`: Prints the current working directory.
-  - `help`: Displays built-ins and feature summary.
-  - `exit [code]`: Terminates the shell session with an optional exit code.
-  - `jobs`: Lists all active background jobs with their job ID, state, and command name.
-- **Background Execution & Job Control**:
-  - `&`: Runs commands or pipelines asynchronously in the background (`sleep 5 &`).
-  - Automatic non-blocking zombie process reaping (`waitpid` with `WNOHANG`).
-  - Background process completion notifications (`[1]+ Done`).
-- **Command Chaining**:
+  - `export KEY=VALUE`: Sets environment variables for the shell and child processes.
+  - `unset KEY`: Unsets environment variables.
+  - `env`: Lists active environment variables.
+  - `jobs`: Lists active background jobs with status and command details.
+  - `help`: Interactive summary of commands, syntax, and features.
+  - `exit [code]`: Exits shell with specified or last status code.
+- **Background Jobs & Reaping**:
+  - `&`: Launches processes or pipelines asynchronously in the background (`sleep 5 &`).
+  - Synchronous, non-blocking zombie reaping using `waitpid(..., WNOHANG)`.
+  - Notification when background tasks finish (`[1]+ Done`).
+- **Command Chaining & Operators**:
   - `;`: Sequential execution (`cmd1 ; cmd2 ; cmd3`).
-  - `&&`: Conditional AND execution — runs the next command only if the previous succeeded (`cmd1 && cmd2`).
-  - `||`: Conditional OR execution — runs the next command only if the previous failed (`cmd1 || cmd2`).
+  - `&&`: Conditional AND execution — runs subsequent command only if previous succeeded (`cmd1 && cmd2`).
+  - `||`: Conditional OR execution — runs subsequent command only if previous failed (`cmd1 || cmd2`).
 - **I/O Redirection**:
-  - `< filename`: Redirects standard input (`open` + `dup2`).
-  - `> filename`: Redirects standard output (create/truncate).
-  - `>> filename`: Appends standard output.
+  - `< file`: Standard input redirection (`open` + `dup2`).
+  - `> file`: Standard output redirection (create / truncate).
+  - `>> file`: Standard output append mode.
+  - Combined `< in.txt > out.txt` redirection.
 - **Pipelines**: Arbitrary multi-stage piping (`cmd1 | cmd2 | ... | cmdN`) using POSIX `pipe()` and `dup2()`.
 - **Expansions**:
-  - `$?`: Expands to the exit status code of the most recently executed command.
-  - `$VAR`: Expands environment variables (e.g. `$USER`, `$HOME`, `$PATH`).
-- **Quoted Arguments**: Supports single (`'...'`) and double (`"..."`) quotes for arguments with spaces, with single quotes suppressing expansion.
-- **Signal Handling**: Protected interactive prompt against `Ctrl+C` (`SIGINT`) and `Ctrl+Z` (`SIGTSTP`); correctly forwards interruption signals to foreground child processes while background processes are shielded.
-- **Robust Terminal Handling**: Clean `EOF` / `Ctrl+D` exit and non-interactive pipe detection via `isatty()`.
+  - `$?`: Exit code of previous foreground command.
+  - `$$`: Process ID of shell instance.
+  - `$VAR` & `${VAR}`: Environment variable expansion inside tokens and strings.
+  - `~`: Tilde expansion to user's `$HOME` (`~/projects`).
+- **Quoting & Literal Preservation**: Single quotes (`'...'`) preserve exact literals without expansion; double quotes (`"..."`) preserve internal spaces and perform variable expansion.
+- **Signal Handling**: Protected interactive prompt against `Ctrl+C` (`SIGINT`) and `Ctrl+Z` (`SIGTSTP`), correctly delegating signals to foreground jobs while shielding background tasks.
+- **Terminal & Stream Robustness**: Handles `Ctrl+D` (`EOF`), empty lines, and non-interactive pipes gracefully.
+
+---
 
 ## Project Structure
 
 ```text
-c-shell/
+apex-shell/
 ├── include/
 │   ├── builtins.h     # Built-in declarations and dispatch table
 │   ├── execute.h      # Process execution, pipelines, and command chaining
 │   ├── jobs.h         # Background job tracking and non-blocking reaping
-│   ├── parser.h       # Tokenization, quoting, line reading, and expansions
+│   ├── parser.h       # Tokenization, quoting, prompt, and expansions
 │   └── signals.h      # Signal handlers (SIGINT, SIGTSTP)
 ├── src/
-│   ├── builtins.c     # Implementations of cd, pwd, help, exit, jobs
+│   ├── builtins.c     # Implementations of cd, pwd, export, unset, env, jobs, help, exit
 │   ├── execute.c      # Execution engine, I/O redirection, and pipelines
 │   ├── jobs.c         # Job list management and zombie process cleanup
-│   ├── main.c         # Shell loop entrypoint
-│   ├── parser.c       # Tokenizer, dynamic prompt, and variable expansion
+│   ├── main.c         # Interactive REPL shell loop entrypoint
+│   ├── parser.c       # Tokenizer, zero-overhead git discovery, and variable expansion
 │   └── signals.c      # Signal setup and protection
 ├── tests/
-│   └── test_shell.sh  # Automated test suite (33 test cases)
+│   └── test_shell.sh  # Automated test suite (38 test cases)
 ├── .github/
 │   └── workflows/
 │       └── ci.yml     # Automated CI pipeline
-├── Makefile           # Build and test rules
+├── Makefile           # Strict build rules (-Wall -Wextra -pedantic -std=c99 -O2)
 ├── ARCHITECTURE.md    # System design, memory ownership, and extensibility guide
 ├── ROADMAP.md         # Long-term feature specifications and engineering milestones
 └── README.md
 ```
+
+---
 
 ## Documentation
 
 - **[System Architecture (ARCHITECTURE.md)](ARCHITECTURE.md)**: In-depth breakdown of component boundaries, execution dataflow, memory ownership contracts, and extensibility patterns.
 - **[Long-term Product Roadmap (ROADMAP.md)](ROADMAP.md)**: Detailed phase-by-phase specifications for systems observability, algorithmic intelligence, scripting, and safety shields.
 
+---
 
 ## Getting Started
 
 ### Prerequisites
 
-- A C compiler (GCC or Clang)
-- Make
-- Bash (for running the automated test suite)
+- A C99 compiler (`gcc` or `clang`)
+- `make`
+- `bash` (for automated test suite)
 
 ### Build and Run
 
 1. **Clone the repository**:
    ```bash
-   git clone https://github.com/Soumyadipta-Banerjee/c-shell.git
-   cd c-shell
+   git clone https://github.com/Soumyadipta-Banerjee/apex-shell.git
+   cd apex-shell
    ```
 
-2. **Build using Makefile**:
+2. **Build with strict warnings**:
    ```bash
    make
    ```
 
-3. **Run the shell**:
+3. **Launch Apex Shell**:
    ```bash
-   ./c-shell
+   ./apex-shell
    ```
-
-   Alternatively, build and run directly with:
+   Or launch directly via make:
    ```bash
    make run
    ```
@@ -107,35 +125,39 @@ c-shell/
    make clean
    ```
 
+---
+
 ## Usage Examples
 
 ```bash
-# Quoted arguments with spaces
-echo "Hello from Soumya's C Shell!"
+# Git-aware prompt appears automatically in Git repositories:
+# soumya@archlinux:~/apex-shell (git:main)$
 
-# Built-in commands
-pwd
-cd ..
-pwd
+# Environment variables
+export PROJECT_NAME=apex-shell
+echo "Welcome to $PROJECT_NAME!"
+echo ${PROJECT_NAME}_v1
+env | grep PROJECT_NAME
+unset PROJECT_NAME
 
 # Background jobs
-sleep 10 &
+sleep 5 &
 jobs
 
 # Command Chaining
 echo "Step 1" ; echo "Step 2"
-make && ./c-shell
+make && ./apex-shell
 cat nonexistent.txt || echo "File not found"
 
 # Expansions
 false ; echo $?       # Prints 1
-echo "Welcome $USER"  # Expands environment variable
-echo '$USER'          # Preserved literally without expansion
+echo "Shell PID: $$"  # Prints PID
+echo ~/projects       # Expands to /home/user/projects
 
 # I/O Redirection
-echo "Hello World" > output.txt
+echo "Hello Apex" > output.txt
 cat < output.txt
-echo "Appended Line" >> output.txt
+echo "Appended text" >> output.txt
 
 # Multi-stage Pipelines
 cat Makefile | grep TARGET | wc -l
@@ -144,15 +166,17 @@ cat Makefile | grep TARGET | wc -l
 exit 0
 ```
 
+---
+
 ## Automated Testing
 
-The project includes an automated test suite ([tests/test_shell.sh](tests/test_shell.sh)) containing **33 test cases** covering:
-- Built-in commands (`pwd`, `cd`, `help`, `exit [code]`, `jobs`)
+The project includes an automated test suite ([tests/test_shell.sh](tests/test_shell.sh)) containing **38 test cases** covering:
+- Built-in commands (`pwd`, `cd`, `export`, `unset`, `env`, `jobs`, `help`, `exit [code]`)
 - Background processes (`&`), job tracking, and asynchronous zombie reaping
 - External command execution
 - Quoting behavior (single and double quotes with whitespace preservation)
 - Command chaining (`&&`, `||`, `;`) and short-circuit evaluation
-- Variable expansion (`$VAR`, `$?`) and literal preservation
+- Variable expansion (`$VAR`, `${VAR}`, `$?`, `$$`, `~`) and literal preservation
 - I/O redirection (`<`, `>`, `>>`, combined input/output)
 - Multi-stage pipelines and stream filtering
 - Signal handling (`SIGINT` shell survival and child interruption)
@@ -162,6 +186,8 @@ Run tests anytime with:
 ```bash
 make test
 ```
+
+---
 
 ## License
 

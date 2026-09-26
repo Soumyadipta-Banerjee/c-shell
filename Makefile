@@ -1,6 +1,6 @@
 CC = gcc
 CFLAGS = -Wall -Wextra -pedantic -std=c99 -O2 -Iinclude
-TARGET = c-shell
+TARGET = apex-shell
 SRCS = src/main.c src/builtins.c src/execute.c src/parser.c src/signals.c src/jobs.c
 OBJS = $(SRCS:.c=.o)
 
@@ -13,7 +13,7 @@ $(TARGET): $(OBJS)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 clean:
-	rm -f $(TARGET) my_shell src/*.o *.o
+	rm -f $(TARGET) c-shell my_shell src/*.o *.o
 
 run: all
 	./$(TARGET)

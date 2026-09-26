@@ -7,7 +7,10 @@ set -u
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-SHELL_BIN="$PROJECT_ROOT/c-shell"
+SHELL_BIN="$PROJECT_ROOT/apex-shell"
+if [ ! -x "$SHELL_BIN" ]; then
+    SHELL_BIN="$PROJECT_ROOT/c-shell"
+fi
 
 # Ensure shell binary exists
 if [ ! -x "$SHELL_BIN" ]; then
@@ -79,7 +82,7 @@ run_test() {
 }
 
 echo -e "${BLUE}========================================${NC}"
-echo -e "${BLUE}       Running c-shell Test Suite       ${NC}"
+echo -e "${BLUE}      Running Apex Shell Test Suite     ${NC}"
 echo -e "${BLUE}========================================${NC}"
 
 # 1. Built-in: pwd
@@ -350,6 +353,41 @@ sleep 0.7
 jobs" \
     "Done" \
     "contains"
+
+# 34. Built-in: export sets environment variable
+run_test "Built-in: export and variable expansion" \
+    "export APEX_TEST_VAR=ApexRocks
+echo \$APEX_TEST_VAR" \
+    "ApexRocks" \
+    "exact"
+
+# 35. Built-in: unset removes environment variable
+run_test "Built-in: unset removes variable" \
+    "export APEX_TEMP_VAR=Temporary
+unset APEX_TEMP_VAR
+echo [\$APEX_TEMP_VAR]" \
+    "[]" \
+    "exact"
+
+# 36. Built-in: env displays environment variables
+run_test "Built-in: env displays environment entries" \
+    "export APEX_ENV_TEST=Discovered
+env" \
+    "APEX_ENV_TEST=Discovered" \
+    "contains"
+
+# 37. Expansion: tilde (~) expands to HOME
+run_test "Expansion: tilde (~) expands to HOME" \
+    "echo ~" \
+    "$HOME" \
+    "exact"
+
+# 38. Expansion: braced variables ${VAR} inside text
+run_test "Expansion: braced \${VAR} inside text" \
+    "export APEX_PREFIX=Super
+echo \${APEX_PREFIX}_Shell" \
+    "Super_Shell" \
+    "exact"
 
 echo -e "${BLUE}========================================${NC}"
 if [ "$FAILED" -eq 0 ]; then
