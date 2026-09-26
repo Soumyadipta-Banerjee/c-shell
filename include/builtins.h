@@ -11,6 +11,7 @@ int lsh_export(char **args);
 int lsh_unset(char **args);
 int lsh_env(char **args);
 int lsh_sysinfo(char **args);
+int lsh_history(char **args);
 
 int lsh_num_builtins(void);
 

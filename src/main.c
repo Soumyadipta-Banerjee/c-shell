@@ -5,9 +5,12 @@
 #include "parser.h"
 #include "execute.h"
 #include "jobs.h"
+#include "history.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
+#include <ctype.h>
 
 void lsh_loop(void)
 {
@@ -27,6 +30,8 @@ void lsh_loop(void)
             }
             break;
         }
+
+        history_add(line);
         tokens = lsh_split_line(line);
         lsh_execute_line(tokens);
 
@@ -35,13 +40,74 @@ void lsh_loop(void)
     }
 }
 
+static int run_script_file(const char *filename)
+{
+    FILE *f = fopen(filename, "r");
+    if (!f)
+    {
+        perror("apex-shell");
+        return 1;
+    }
+
+    char *line = NULL;
+    size_t len = 0;
+    ssize_t read;
+
+    while (!g_should_exit && (read = getline(&line, &len, f)) != -1)
+    {
+        jobs_reap();
+        line[strcspn(line, "\r\n")] = '\0';
+
+        char *p = line;
+        while (*p && isspace((unsigned char)*p))
+        {
+            p++;
+        }
+
+        if (*p == '\0' || *p == '#')
+        {
+            continue;
+        }
+
+        ShellToken **tokens = lsh_split_line(p);
+        lsh_execute_line(tokens);
+        lsh_free_tokens(tokens);
+    }
+
+    free(line);
+    fclose(f);
+    return g_last_exit_status;
+}
+
+static int run_command_string(const char *cmd)
+{
+    ShellToken **tokens = lsh_split_line((char *)cmd);
+    lsh_execute_line(tokens);
+    lsh_free_tokens(tokens);
+    return g_last_exit_status;
+}
+
 int main(int argc, char **argv)
 {
-    (void)argc;
-    (void)argv;
     jobs_init();
     lsh_init_signals();
-    lsh_loop();
+
+    if (argc >= 3 && strcmp(argv[1], "-c") == 0)
+    {
+        run_command_string(argv[2]);
+    }
+    else if (argc >= 2 && argv[1][0] != '-')
+    {
+        run_script_file(argv[1]);
+    }
+    else
+    {
+        history_init();
+        lsh_loop();
+        history_save();
+        history_cleanup();
+    }
+
     jobs_cleanup();
     return g_last_exit_status;
 }

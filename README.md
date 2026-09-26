@@ -4,13 +4,21 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Standards: C99](https://img.shields.io/badge/C-99-informational.svg)](Makefile)
 
-A high-performance, portfolio-grade Unix shell written in C99 exploring POSIX system calls, process lifecycles, memory safety, dynamic Git prompt integration, algorithmic intelligence, and native systems observability.
+A high-performance, portfolio-grade Unix shell written in C99 exploring POSIX system calls, process lifecycles, memory safety, dynamic Git prompt integration, algorithmic intelligence, scripting execution, and native systems observability.
 
 ---
 
 ## Key Features
 
 - **Process Management**: Robust lifecycle orchestration using `fork()`, `execvp()`, and `waitpid()`.
+- **Scripting & Non-Interactive Execution**:
+  - `apex-shell -c "commands"`: Executes inline one-liners with command chaining, redirections, and pipelines, exiting with the exact status code.
+  - `apex-shell script.apex`: Reads and executes shell scripts line by line, gracefully ignoring comments starting with `#`.
+- **Persistent Command History**:
+  - `history`: Lists recorded commands with line numbers.
+  - `history N`: Prints the last `N` recorded commands.
+  - `history -c`: Clears in-memory and disk history.
+  - Automatically loads and persists up to 1,000 commands to `~/.apex_history`.
 - **Algorithmic Intelligence ("Did You Mean?" Suggestions)**:
   - High-performance Damerau-Levenshtein distance algorithm with transposition, deletion, insertion, and substitution handling.
   - Automatically triggered when `execvp` fails with `ENOENT`. Scans built-in commands and binaries in `$PATH` to suggest the closest match (`gti` $\to$ `git`, `pwdd` $\to$ `pwd`, `clea` $\to$ `clear`, `sl` $\to$ `ls`).
@@ -29,6 +37,7 @@ A high-performance, portfolio-grade Unix shell written in C99 exploring POSIX sy
   - `env`: Lists active environment variables.
   - `jobs`: Lists active background jobs with status and command details.
   - `sysinfo`: Renders the live system observability dashboard.
+  - `history`: Displays or clears command history.
   - `help`: Interactive summary of commands, syntax, and features.
   - `exit [code]`: Exits shell with specified or last status code.
 - **Background Jobs & Reaping**:
@@ -64,21 +73,23 @@ apex-shell/
 │   ├── builtins.h     # Built-in declarations and dispatch table
 │   ├── execute.h      # Process execution, pipelines, and command chaining
 │   ├── fuzzy.h        # Damerau-Levenshtein distance & command suggestions
+│   ├── history.h      # Command history and persistent serialization
 │   ├── jobs.h         # Background job tracking and non-blocking reaping
 │   ├── parser.h       # Tokenization, quoting, prompt, and expansions
 │   ├── signals.h      # Signal handlers (SIGINT, SIGTSTP)
 │   └── telemetry.h    # Observability: time profiler and sysinfo dashboard
 ├── src/
-│   ├── builtins.c     # Implementations of cd, pwd, export, unset, env, jobs, sysinfo, help, exit
+│   ├── builtins.c     # Implementations of cd, pwd, export, unset, env, jobs, sysinfo, history, help, exit
 │   ├── execute.c      # Execution engine, I/O redirection, and pipelines
 │   ├── fuzzy.c        # Typo correction and PATH binary candidate discovery
+│   ├── history.c      # In-memory history buffer and file persistence (~/.apex_history)
 │   ├── jobs.c         # Job list management and zombie process cleanup
-│   ├── main.c         # Interactive REPL shell loop entrypoint
+│   ├── main.c         # REPL loop, script execution (.apex), and -c execution
 │   ├── parser.c       # Tokenizer, zero-overhead git discovery, and variable expansion
 │   ├── signals.c      # Signal setup and prompt protection
 │   └── telemetry.c    # getrusage profiling and /proc system metrics parser
 ├── tests/
-│   └── test_shell.sh  # Automated test suite (48 test cases)
+│   └── test_shell.sh  # Automated test suite (54 test cases)
 ├── .github/
 │   └── workflows/
 │       └── ci.yml     # Automated CI pipeline
@@ -127,12 +138,18 @@ apex-shell/
    make run
    ```
 
-4. **Run the automated test suite**:
+4. **Run a script or inline command**:
+   ```bash
+   ./apex-shell script.apex
+   ./apex-shell -c "sysinfo && time sleep 0.1"
+   ```
+
+5. **Run the automated test suite**:
    ```bash
    make test
    ```
 
-5. **Clean build artifacts**:
+6. **Clean build artifacts**:
    ```bash
    make clean
    ```
@@ -144,6 +161,14 @@ apex-shell/
 ```bash
 # Git-aware prompt appears automatically in Git repositories:
 # soumya@archlinux:~/apex-shell (git:main)$
+
+# Non-interactive inline execution
+apex-shell -c "echo Running && sysinfo"
+
+# Persistent Command History
+history
+history 5
+history -c
 
 # Algorithmic Intelligence: catches typos and suggests fixes
 $ gti status
@@ -198,10 +223,12 @@ exit 0
 
 ## Automated Testing
 
-The project includes an automated test suite ([tests/test_shell.sh](tests/test_shell.sh)) containing **48 test cases** covering:
+The project includes an automated test suite ([tests/test_shell.sh](tests/test_shell.sh)) containing **54 test cases** covering:
+- Scripting & One-Liners (`-c` execution, `.apex` file execution, `#` comment ignoring, exit codes)
+- Persistent History (`history` built-in, numerical limits, serialization)
 - Algorithmic Intelligence (Damerau-Levenshtein fuzzy matching, built-in and PATH typo suggestions, exit 127)
 - Systems Observability & Telemetry (`time` command rusage profiler, status preservation, `sysinfo` dashboard)
-- Built-in commands (`pwd`, `cd`, `export`, `unset`, `env`, `jobs`, `sysinfo`, `help`, `exit [code]`)
+- Built-in commands (`pwd`, `cd`, `export`, `unset`, `env`, `jobs`, `sysinfo`, `history`, `help`, `exit [code]`)
 - Background processes (`&`), job tracking, and asynchronous zombie reaping
 - External command execution
 - Quoting behavior (single and double quotes with whitespace preservation)

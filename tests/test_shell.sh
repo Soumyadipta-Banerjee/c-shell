@@ -449,6 +449,77 @@ run_test "Fuzzy: completely unknown command outputs error cleanly" \
     "apex-shell: 'zzzzqqqq9999' command not found" \
     "contains"
 
+# 49. Scripting: -c runs inline command string
+TOTAL=$((TOTAL + 1))
+printf "Test %2d: %-50s " "$TOTAL" "Scripting: -c runs inline command string"
+OUTPUT=$("$SHELL_BIN" -c "echo HelloInline")
+if [ "$OUTPUT" = "HelloInline" ]; then
+    PASSED=$((PASSED + 1))
+    echo -e "${GREEN}[PASS]${NC}"
+else
+    FAILED=$((FAILED + 1))
+    echo -e "${RED}[FAIL]${NC} (got '$OUTPUT', expected 'HelloInline')"
+fi
+
+# 50. Scripting: -c preserves exit status code
+TOTAL=$((TOTAL + 1))
+printf "Test %2d: %-50s " "$TOTAL" "Scripting: -c preserves exit status code"
+"$SHELL_BIN" -c "exit 42" > /dev/null 2>&1
+EXIT_VAL=$?
+if [ "$EXIT_VAL" -eq 42 ]; then
+    PASSED=$((PASSED + 1))
+    echo -e "${GREEN}[PASS]${NC}"
+else
+    FAILED=$((FAILED + 1))
+    echo -e "${RED}[FAIL]${NC} (got $EXIT_VAL, expected 42)"
+fi
+
+# 51. Scripting: file execution ignores # comments
+TOTAL=$((TOTAL + 1))
+printf "Test %2d: %-50s " "$TOTAL" "Scripting: file execution ignores # comments"
+printf "# Comment\necho Line1\n# Another comment\necho Line2\n" > "$TEST_DIR/test_run.apex"
+OUTPUT=$("$SHELL_BIN" "$TEST_DIR/test_run.apex")
+EXPECTED="Line1
+Line2"
+if [ "$OUTPUT" = "$EXPECTED" ]; then
+    PASSED=$((PASSED + 1))
+    echo -e "${GREEN}[PASS]${NC}"
+else
+    FAILED=$((FAILED + 1))
+    echo -e "${RED}[FAIL]${NC}"
+fi
+
+# 52. Scripting: file execution preserves exit code
+TOTAL=$((TOTAL + 1))
+printf "Test %2d: %-50s " "$TOTAL" "Scripting: file execution preserves exit code"
+printf "echo Testing\nexit 29\n" > "$TEST_DIR/test_exit.apex"
+"$SHELL_BIN" "$TEST_DIR/test_exit.apex" > /dev/null 2>&1
+EXIT_VAL=$?
+if [ "$EXIT_VAL" -eq 29 ]; then
+    PASSED=$((PASSED + 1))
+    echo -e "${GREEN}[PASS]${NC}"
+else
+    FAILED=$((FAILED + 1))
+    echo -e "${RED}[FAIL]${NC} (got $EXIT_VAL, expected 29)"
+fi
+
+# 53. History: built-in displays recorded commands
+run_test "History: built-in displays recorded commands" \
+    "echo hist_test_alpha
+echo hist_test_beta
+history" \
+    "hist_test_alpha" \
+    "contains"
+
+# 54. History: limits entries with numeric argument
+run_test "History: limits entries with numeric argument" \
+    "echo h1
+echo h2
+echo h3
+history 1" \
+    "history 1" \
+    "contains"
+
 echo -e "${BLUE}========================================${NC}"
 if [ "$FAILED" -eq 0 ]; then
     echo -e "${GREEN}All $TOTAL tests passed successfully!${NC}"

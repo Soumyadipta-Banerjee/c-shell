@@ -140,10 +140,10 @@ Enable writing and executing shell scripts, inline `-c` execution, and persisten
    - On shell exit: write updated history to `~/.cshell_history`.
 
 ### Implementation Checklist
-- [ ] Modify `src/main.c` argument handling to detect `-c` and file paths.
-- [ ] Create `include/history.h` and `src/history.c`.
-- [ ] Implement `history` built-in and file serialization.
-- [ ] Add automated tests for script execution and history commands.
+- [x] Modify `src/main.c` argument handling to detect `-c` and file paths.
+- [x] Create `include/history.h` and `src/history.c`.
+- [x] Implement `history` built-in, numerical limits (`history N`), clear (`history -c`), and persistent serialization (`~/.apex_history`).
+- [x] Add automated tests for script execution, `-c` inline one-liners, and history commands (tests 49-54).
 
 ---
 
