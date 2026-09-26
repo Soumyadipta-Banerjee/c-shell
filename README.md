@@ -25,6 +25,7 @@ A feature-rich Unix shell implementation written in C, exploring process managem
 
 - A C compiler (GCC or Clang)
 - Make
+- Bash (for running the automated test suite)
 
 ### Build and Run
 
@@ -44,12 +45,17 @@ A feature-rich Unix shell implementation written in C, exploring process managem
    ./c-shell
    ```
 
-Alternatively, you can build and run directly with:
-```bash
-make run
-```
+   Alternatively, build and run directly with:
+   ```bash
+   make run
+   ```
 
-4. **Clean build artifacts**:
+4. **Run the automated test suite**:
+   ```bash
+   make test
+   ```
+
+5. **Clean build artifacts**:
    ```bash
    make clean
    ```
@@ -75,6 +81,21 @@ cat Makefile | grep TARGET | wc -l
 
 # Exit
 exit
+```
+
+## Automated Testing
+
+The project includes an automated test suite ([tests/test_shell.sh](tests/test_shell.sh)) covering:
+- Built-in commands (`pwd`, `cd`, `help`, `exit`)
+- External command execution
+- Quoting behavior (single and double quotes with whitespace preservation)
+- I/O redirection (`<`, `>`, `>>`, combined input/output)
+- Multi-stage pipelines and stream filtering
+- Error handling and syntax validation
+
+Run tests anytime with:
+```bash
+make test
 ```
 
 ## License

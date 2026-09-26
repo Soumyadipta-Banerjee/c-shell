@@ -14,4 +14,7 @@ clean:
 run: all
 	./$(TARGET)
 
-.PHONY: all clean run
+test: $(TARGET)
+	@bash tests/test_shell.sh
+
+.PHONY: all clean run test

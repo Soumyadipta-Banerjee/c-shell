@@ -1,0 +1,227 @@
+#!/usr/bin/env bash
+
+# Test suite for c-shell
+# Exit with non-zero if any test fails
+
+set -u
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+SHELL_BIN="$PROJECT_ROOT/c-shell"
+
+# Ensure shell binary exists
+if [ ! -x "$SHELL_BIN" ]; then
+    echo "Error: Shell binary not found or not executable at '$SHELL_BIN'."
+    echo "Please run 'make' first."
+    exit 1
+fi
+
+# Color definitions
+GREEN='\033[0;32m'
+RED='\033[0;31m'
+BLUE='\033[0;34m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+
+TOTAL=0
+PASSED=0
+FAILED=0
+
+# Create temporary sandbox directory for file tests
+TEST_DIR="$(mktemp -d -t cshell_test_XXXXXX)"
+trap 'rm -rf "$TEST_DIR"' EXIT
+
+run_test() {
+    local test_name="$1"
+    local input="$2"
+    local expected_output="$3"
+    local check_type="${4:-exact}" # exact, contains, or exit_only
+
+    TOTAL=$((TOTAL + 1))
+    printf "Test %2d: %-50s " "$TOTAL" "$test_name"
+
+    local actual_output
+    actual_output=$(printf "%s\n" "$input" | (cd "$TEST_DIR" && "$SHELL_BIN" 2>&1))
+    local exit_code=$?
+
+    local pass=0
+    case "$check_type" in
+        exact)
+            if [ "$actual_output" = "$expected_output" ]; then
+                pass=1
+            fi
+            ;;
+        contains)
+            if echo "$actual_output" | grep -q "$expected_output"; then
+                pass=1
+            fi
+            ;;
+        exit_only)
+            if [ "$exit_code" -eq 0 ]; then
+                pass=1
+            fi
+            ;;
+    esac
+
+    if [ "$pass" -eq 1 ]; then
+        PASSED=$((PASSED + 1))
+        echo -e "${GREEN}[PASS]${NC}"
+    else
+        FAILED=$((FAILED + 1))
+        echo -e "${RED}[FAIL]${NC}"
+        echo "  Input:"
+        echo "$input" | sed 's/^/    /'
+        echo "  Expected ($check_type):"
+        echo "$expected_output" | sed 's/^/    /'
+        echo "  Actual:"
+        echo "$actual_output" | sed 's/^/    /'
+    fi
+}
+
+echo -e "${BLUE}========================================${NC}"
+echo -e "${BLUE}       Running c-shell Test Suite       ${NC}"
+echo -e "${BLUE}========================================${NC}"
+
+# 1. Built-in: pwd
+run_test "Built-in: pwd prints working directory" \
+    "pwd" \
+    "$TEST_DIR" \
+    "exact"
+
+# 2. Built-in: cd to directory and pwd
+mkdir -p "$TEST_DIR/subdir"
+run_test "Built-in: cd to subdirectory and pwd" \
+    "cd subdir
+pwd" \
+    "$TEST_DIR/subdir" \
+    "exact"
+
+# 3. Built-in: cd with no arguments defaults to HOME
+run_test "Built-in: cd without args defaults to HOME" \
+    "cd
+pwd" \
+    "$HOME" \
+    "exact"
+
+# 4. Built-in: cd ~ goes to HOME
+run_test "Built-in: cd ~ goes to HOME" \
+    "cd ~
+pwd" \
+    "$HOME" \
+    "exact"
+
+# 5. Built-in: cd to non-existent directory reports error
+run_test "Built-in: cd to invalid directory reports error" \
+    "cd /nonexistent_path_12345" \
+    "No such file or directory" \
+    "contains"
+
+# 6. Built-in: help lists commands
+run_test "Built-in: help displays builtin commands" \
+    "help" \
+    "cd" \
+    "contains"
+
+# 7. Built-in: exit terminates shell execution
+run_test "Built-in: exit stops command execution" \
+    "echo start
+exit
+echo unreachable" \
+    "start" \
+    "exact"
+
+# 8. External: basic command execution
+run_test "External: basic command execution (echo)" \
+    "echo testing 1 2 3" \
+    "testing 1 2 3" \
+    "exact"
+
+# 9. Parsing: double quotes preserve spaces
+run_test "Parsing: double quotes preserve inner spaces" \
+    "echo \"hello   world   from   c-shell\"" \
+    "hello   world   from   c-shell" \
+    "exact"
+
+# 10. Parsing: single quotes preserve inner spaces
+run_test "Parsing: single quotes preserve inner spaces" \
+    "echo 'single quoted argument with spaces'" \
+    "single quoted argument with spaces" \
+    "exact"
+
+# 11. Redirection: Output redirection (>)
+run_test "Redirection: output (>) writes file" \
+    "echo \"output test\" > out.txt
+cat out.txt" \
+    "output test" \
+    "exact"
+
+# 12. Redirection: Output append redirection (>>)
+run_test "Redirection: append (>>) adds content" \
+    "echo \"first line\" > append.txt
+echo \"second line\" >> append.txt
+cat append.txt" \
+    "first line
+second line" \
+    "exact"
+
+# 13. Redirection: Input redirection (<)
+echo "input file content" > "$TEST_DIR/input.txt"
+run_test "Redirection: input (<) reads file" \
+    "cat < input.txt" \
+    "input file content" \
+    "exact"
+
+# 14. Redirection: Combined input and output redirection
+echo "data to copy" > "$TEST_DIR/source.txt"
+run_test "Redirection: combined input (<) and output (>)" \
+    "cat < source.txt > dest.txt
+cat dest.txt" \
+    "data to copy" \
+    "exact"
+
+# 15. Pipeline: 2-stage pipeline
+run_test "Pipeline: 2-stage pipeline (echo | tr)" \
+    "echo \"pipeline test\" | tr \"a-z\" \"A-Z\"" \
+    "PIPELINE TEST" \
+    "exact"
+
+# 16. Pipeline: 3-stage pipeline
+run_test "Pipeline: 3-stage pipeline (echo | tr | wc -l)" \
+    "echo \"one two three four\" | tr \" \" \"\n\" | wc -l" \
+    "4" \
+    "exact"
+
+# 17. Pipeline: filtering with grep
+run_test "Pipeline: filtering stream with grep" \
+    "printf \"apple\nbanana\ncherry\n\" | grep banana" \
+    "banana" \
+    "exact"
+
+# 18. Redirection: missing file syntax error
+run_test "Redirection: syntax error when target missing" \
+    "echo test >" \
+    "syntax error near unexpected token 'newline'" \
+    "contains"
+
+# 19. Pipeline: empty pipe stage syntax error
+run_test "Pipeline: syntax error on invalid empty pipe" \
+    "ls | | grep" \
+    "syntax error near unexpected token '|'" \
+    "contains"
+
+# 20. Empty line / whitespace input handled gracefully
+run_test "Robustness: blank lines and whitespace do not crash" \
+    "   
+
+echo alive" \
+    "alive" \
+    "exact"
+
+echo -e "${BLUE}========================================${NC}"
+if [ "$FAILED" -eq 0 ]; then
+    echo -e "${GREEN}All $TOTAL tests passed successfully!${NC}"
+    exit 0
+else
+    echo -e "${RED}Test Results: $PASSED passed, $FAILED failed out of $TOTAL.${NC}"
+    exit 1
+fi
