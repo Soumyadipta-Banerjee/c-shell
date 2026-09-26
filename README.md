@@ -17,6 +17,7 @@ A feature-rich Unix shell implementation written in C, exploring process managem
   - `>> filename`: Appends standard output.
 - **Pipelines**: Arbitrary multi-stage piping (`cmd1 | cmd2 | ... | cmdN`) using POSIX `pipe()` and `dup2()`.
 - **Quoted Arguments**: Supports single (`'...'`) and double (`"..."`) quotes for arguments containing spaces.
+- **Signal Handling**: Protected interactive prompt against `Ctrl+C` (`SIGINT`) and `Ctrl+Z` (`SIGTSTP`); correctly forwards interruption signals to foreground child processes.
 - **Robust Terminal Handling**: Clean `EOF` / `Ctrl+D` exit and non-interactive pipe detection via `isatty()`.
 
 ## Getting Started

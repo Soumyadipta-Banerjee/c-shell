@@ -217,6 +217,58 @@ echo alive" \
     "alive" \
     "exact"
 
+# 21. Signal Handling: SIGINT directly to shell does not kill it
+TOTAL=$((TOTAL + 1))
+printf "Test %2d: %-50s " "$TOTAL" "Signals: SIGINT does not kill shell at prompt"
+python3 -c "
+import subprocess, time, signal, sys
+p = subprocess.Popen(['$SHELL_BIN'], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+time.sleep(0.1)
+p.send_signal(signal.SIGINT)
+time.sleep(0.1)
+stdout, _ = p.communicate(input='echo alive\nexit\n', timeout=2)
+if 'alive' in stdout:
+    sys.exit(0)
+sys.exit(1)
+" > /dev/null 2>&1
+if [ $? -eq 0 ]; then
+    PASSED=$((PASSED + 1))
+    echo -e "${GREEN}[PASS]${NC}"
+else
+    FAILED=$((FAILED + 1))
+    echo -e "${RED}[FAIL]${NC}"
+fi
+
+# 22. Signal Handling: SIGINT terminates running child while shell survives
+TOTAL=$((TOTAL + 1))
+printf "Test %2d: %-50s " "$TOTAL" "Signals: SIGINT interrupts child, shell survives"
+python3 -c "
+import subprocess, time, signal, os, sys
+p = subprocess.Popen(['$SHELL_BIN'], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+p.stdin.write('sleep 5\n')
+p.stdin.flush()
+time.sleep(0.3)
+ps = subprocess.run(['pgrep', '-P', str(p.pid), 'sleep'], capture_output=True, text=True)
+child_pid = ps.stdout.strip()
+if not child_pid:
+    sys.exit(1)
+os.kill(int(child_pid), signal.SIGINT)
+time.sleep(0.2)
+p.stdin.write('echo child_reaped_shell_running\nexit\n')
+p.stdin.flush()
+stdout, _ = p.communicate(timeout=3)
+if 'child_reaped_shell_running' in stdout:
+    sys.exit(0)
+sys.exit(1)
+" > /dev/null 2>&1
+if [ $? -eq 0 ]; then
+    PASSED=$((PASSED + 1))
+    echo -e "${GREEN}[PASS]${NC}"
+else
+    FAILED=$((FAILED + 1))
+    echo -e "${RED}[FAIL]${NC}"
+fi
+
 echo -e "${BLUE}========================================${NC}"
 if [ "$FAILED" -eq 0 ]; then
     echo -e "${GREEN}All $TOTAL tests passed successfully!${NC}"
@@ -225,3 +277,4 @@ else
     echo -e "${RED}Test Results: $PASSED passed, $FAILED failed out of $TOTAL.${NC}"
     exit 1
 fi
+

@@ -7,6 +7,38 @@
 #include <sys/wait.h>
 #include <string.h>
 #include <fcntl.h>
+#include <signal.h>
+#include <errno.h>
+
+/* Global signal interruption flag */
+volatile sig_atomic_t g_interrupted = 0;
+
+static void sigint_handler(int signo)
+{
+    (void)signo;
+    g_interrupted = 1;
+    if (isatty(STDIN_FILENO))
+    {
+        write(STDOUT_FILENO, "\n", 1);
+    }
+}
+
+void lsh_init_signals(void)
+{
+    struct sigaction sa;
+    memset(&sa, 0, sizeof(sa));
+    sa.sa_handler = sigint_handler;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = 0;
+    sigaction(SIGINT, &sa, NULL);
+
+    struct sigaction sa_tstp;
+    memset(&sa_tstp, 0, sizeof(sa_tstp));
+    sa_tstp.sa_handler = SIG_IGN;
+    sigemptyset(&sa_tstp.sa_mask);
+    sa_tstp.sa_flags = 0;
+    sigaction(SIGTSTP, &sa_tstp, NULL);
+}
 
 /* Built-in shell command declarations */
 int lsh_cd(char **args);
@@ -81,6 +113,7 @@ int lsh_help(char **args)
     printf("  - I/O Redirection: < (input), > (output), >> (append)\n");
     printf("  - Pipelines:       cmd1 | cmd2 | ... | cmdN\n");
     printf("  - Quoted strings:  \"hello world\" or 'hello world'\n");
+    printf("  - Signal Handling: Ctrl+C (SIGINT) and Ctrl+Z (SIGTSTP) protection\n");
     return 1;
 }
 
@@ -219,9 +252,20 @@ int lsh_launch(char **args)
     pid_t pid;
     int status;
 
+    struct sigaction sa_ignore, sa_orig_int, sa_orig_tstp;
+    memset(&sa_ignore, 0, sizeof(sa_ignore));
+    sa_ignore.sa_handler = SIG_IGN;
+    sigemptyset(&sa_ignore.sa_mask);
+    sa_ignore.sa_flags = 0;
+    sigaction(SIGINT, &sa_ignore, &sa_orig_int);
+    sigaction(SIGTSTP, &sa_ignore, &sa_orig_tstp);
+
     pid = fork();
     if (pid == 0)
     {
+        signal(SIGINT, SIG_DFL);
+        signal(SIGTSTP, SIG_DFL);
+
         handle_redirection(args);
         if (args[0] == NULL)
         {
@@ -235,15 +279,31 @@ int lsh_launch(char **args)
     }
     else if (pid < 0)
     {
-        perror("lsh");
+        perror("lsh: fork");
     }
     else
     {
         do
         {
             waitpid(pid, &status, WUNTRACED);
-        } while (!WIFEXITED(status) && !WIFSIGNALED(status));
+        } while (!WIFEXITED(status) && !WIFSIGNALED(status) && !WIFSTOPPED(status));
+
+        if (WIFSIGNALED(status))
+        {
+            if (WTERMSIG(status) == SIGINT)
+            {
+                write(STDOUT_FILENO, "\n", 1);
+            }
+        }
+        else if (WIFSTOPPED(status))
+        {
+            printf("\n[%d] Stopped\n", pid);
+        }
     }
+
+    sigaction(SIGINT, &sa_orig_int, NULL);
+    sigaction(SIGTSTP, &sa_orig_tstp, NULL);
+
     return 1;
 }
 
@@ -268,11 +328,22 @@ int lsh_execute_pipeline(char ***cmd_args, int num_cmds)
         return 1;
     }
 
+    struct sigaction sa_ignore, sa_orig_int, sa_orig_tstp;
+    memset(&sa_ignore, 0, sizeof(sa_ignore));
+    sa_ignore.sa_handler = SIG_IGN;
+    sigemptyset(&sa_ignore.sa_mask);
+    sa_ignore.sa_flags = 0;
+    sigaction(SIGINT, &sa_ignore, &sa_orig_int);
+    sigaction(SIGTSTP, &sa_ignore, &sa_orig_tstp);
+
     for (int i = 0; i < num_cmds; i++)
     {
         pids[i] = fork();
         if (pids[i] == 0)
         {
+            signal(SIGINT, SIG_DFL);
+            signal(SIGTSTP, SIG_DFL);
+
             // If not first command, redirect stdin from previous pipe
             if (i > 0)
             {
@@ -326,6 +397,8 @@ int lsh_execute_pipeline(char ***cmd_args, int num_cmds)
         {
             perror("lsh: fork");
             free(pids);
+            sigaction(SIGINT, &sa_orig_int, NULL);
+            sigaction(SIGTSTP, &sa_orig_tstp, NULL);
             return 1;
         }
     }
@@ -337,13 +410,25 @@ int lsh_execute_pipeline(char ***cmd_args, int num_cmds)
     }
 
     // Wait for all children to complete
+    int any_signaled = 0;
     for (int i = 0; i < num_cmds; i++)
     {
         int status;
         waitpid(pids[i], &status, 0);
+        if (WIFSIGNALED(status) && WTERMSIG(status) == SIGINT)
+        {
+            any_signaled = 1;
+        }
+    }
+
+    if (any_signaled)
+    {
+        write(STDOUT_FILENO, "\n", 1);
     }
 
     free(pids);
+    sigaction(SIGINT, &sa_orig_int, NULL);
+    sigaction(SIGTSTP, &sa_orig_tstp, NULL);
     return 1;
 }
 
@@ -501,6 +586,20 @@ char *lsh_read_line(void)
     {
         c = getchar();
 
+        if (g_interrupted || (c == EOF && errno == EINTR))
+        {
+            g_interrupted = 0;
+            errno = 0;
+            clearerr(stdin);
+            free(buffer);
+            char *empty = malloc(1);
+            if (empty)
+            {
+                empty[0] = '\0';
+            }
+            return empty;
+        }
+
         if (c == EOF)
         {
             if (position == 0)
@@ -565,6 +664,7 @@ int main(int argc, char **argv)
 {
     (void)argc;
     (void)argv;
+    lsh_init_signals();
     lsh_loop();
     return EXIT_SUCCESS;
 }
