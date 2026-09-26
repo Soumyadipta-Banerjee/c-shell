@@ -9,6 +9,7 @@
 #include "alias.h"
 #include "safety.h"
 #include "linereader.h"
+#include "builtins.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -108,6 +109,20 @@ int main(int argc, char **argv)
     else
     {
         history_init();
+
+        /* Auto-load ~/.apexrc on interactive startup if present */
+        const char *home = getenv("HOME");
+        if (home != NULL)
+        {
+            char rc_path[1024];
+            snprintf(rc_path, sizeof(rc_path), "%s/.apexrc", home);
+            if (access(rc_path, R_OK) == 0)
+            {
+                char *rc_args[] = {"source", rc_path, NULL};
+                lsh_source(rc_args);
+            }
+        }
+
         lsh_loop();
         history_save();
         history_cleanup();

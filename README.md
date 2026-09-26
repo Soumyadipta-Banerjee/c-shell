@@ -10,6 +10,16 @@ A high-performance, portfolio-grade Unix shell written in C99 exploring POSIX sy
 
 ## Key Features
 
+- **POSIX Terminal Job Control & Suspension**:
+  - Full process group orchestration using `setpgid()` and foreground terminal delegation via `tcsetpgrp()`.
+  - Foreground job suspension via `Ctrl+Z` (`SIGTSTP`), capturing `WIFSTOPPED` and registering jobs as `Stopped`.
+  - `jobs`: Lists active background and suspended tasks with state (`Running` vs `Stopped`) and `+`/`-` indicators.
+  - `fg [job_id]`: Brings a background or suspended job to the foreground, sending `SIGCONT` if stopped and waiting for execution.
+  - `bg [job_id]`: Resumes a suspended job in the background via `SIGCONT`.
+  - `kill [-signal] pid | %job_id`: Signals jobs by logical `%id` or process `pid` with numeric and named signal support.
+- **Startup Configuration & Sourcing (`source`, `.`, and `~/.apexrc`)**:
+  - `source <file>` / `. <file>`: Reads and executes commands directly in the current shell session, dynamically exporting variables and setting aliases.
+  - Automatic profile initialization: seamlessly loads `~/.apexrc` on interactive startup if present.
 - **Interactive Line Editing & Tab Autocompletion**:
   - Direct raw terminal control (`termios`) with zero escape sequence corruption.
   - Left / Right arrow cursor repositioning, Home (`Ctrl+A`), End (`Ctrl+E`), Backspace, and Delete.
@@ -50,10 +60,14 @@ A high-performance, portfolio-grade Unix shell written in C99 exploring POSIX sy
   - `export KEY=VALUE`: Sets environment variables for the shell and child processes.
   - `unset KEY`: Unsets environment variables.
   - `env`: Lists active environment variables.
+  - `fg [%id]`: Brings a background or stopped job to the foreground terminal.
+  - `bg [%id]`: Resumes a stopped job in the background.
+  - `kill [-signal] pid | %id`: Sends a signal to a process or job.
+  - `jobs`: Lists active background and stopped jobs with state indicators.
+  - `source <file>` / `. <file>`: Executes commands from file in current shell environment.
   - `alias [name='val']`: Sets or lists user-defined command aliases.
   - `unalias [name|-a]`: Removes specific or all command aliases.
   - `safemode [on|off|status]`: Configures or inspects the accidental deletion shield.
-  - `jobs`: Lists active background jobs with status and command details.
   - `sysinfo`: Renders the live system observability dashboard.
   - `history`: Displays or clears command history.
   - `help`: Interactive summary of commands, syntax, and features.
@@ -223,6 +237,19 @@ safemode on
 rm -rf /               # Intercepted and blocked: Dangerous deletion prevented!
 safemode off
 
+# POSIX Job Control
+sleep 60 &             # Starts job in background ([1] <pid>)
+jobs                   # Lists active and stopped jobs
+kill -STOP %1          # Suspends background job (or Ctrl+Z in foreground)
+jobs                   # [1]+ Stopped sleep 60
+bg %1                  # Resumes job in background ([1]+ sleep 60 &)
+fg %1                  # Brings job back to foreground
+kill -9 %1             # Force kills job
+
+# Startup Profiles & Sourcing
+source ~/.apexrc       # Dynamically loads variables and aliases
+. custom_profile.apex  # Dot notation synonym for source
+
 # Interactive Line Editing & Autocompletion (in terminal)
 # [Tab] completes built-in commands and file paths
 # [Up/Down] arrows browse previous command history
@@ -266,7 +293,9 @@ exit 0
 
 ## Automated Testing
 
-The project includes an automated test suite ([tests/test_shell.sh](tests/test_shell.sh)) containing **61 test cases** covering:
+The project includes an automated test suite ([tests/test_shell.sh](tests/test_shell.sh)) containing **70 test cases** covering:
+- POSIX Terminal Job Control (`fg`, `bg`, `kill [-sig]`, `jobs`, `Ctrl+Z` suspension, process groups)
+- Startup Configuration & Profiles (`source <file>`, `. <file>`, auto-loading of `~/.apexrc`)
 - Interactive Line Editing & Autocompletion (`termios` raw mode, buffer traversal, tab completion)
 - Command Aliases (`alias`, `unalias`, recursive prevention, argument passing)
 - Proactive Safety Shield (`safemode`, catastrophic `rm` command blocking, confirmation checks)
@@ -274,7 +303,7 @@ The project includes an automated test suite ([tests/test_shell.sh](tests/test_s
 - Persistent History (`history` built-in, numerical limits, serialization)
 - Algorithmic Intelligence (Damerau-Levenshtein fuzzy matching, built-in and PATH typo suggestions, exit 127)
 - Systems Observability & Telemetry (`time` command rusage profiler, status preservation, `sysinfo` dashboard)
-- Built-in commands (`pwd`, `cd`, `export`, `unset`, `env`, `alias`, `unalias`, `safemode`, `jobs`, `sysinfo`, `history`, `help`, `exit [code]`)
+- Built-in commands (`pwd`, `cd`, `export`, `unset`, `env`, `fg`, `bg`, `kill`, `source`, `.`, `alias`, `unalias`, `safemode`, `jobs`, `sysinfo`, `history`, `help`, `exit [code]`)
 - Background processes (`&`), job tracking, and asynchronous zombie reaping
 - External command execution
 - Quoting behavior (single and double quotes with whitespace preservation)

@@ -55,7 +55,7 @@ run_test() {
             fi
             ;;
         contains)
-            if echo "$actual_output" | grep -q "$expected_output"; then
+            if echo "$actual_output" | grep -F -q "$expected_output"; then
                 pass=1
             fi
             ;;
@@ -570,6 +570,70 @@ safemode on" \
 Safety Shield: ENABLED" \
     "exact"
 
+# 62. Configuration: source loads variables and aliases into current shell
+printf "export SOURCED_VAR=apex_rules\nalias scmd='echo SourcedAlias'\n" > "$TEST_DIR/profile.apex"
+run_test "Configuration: source loads variables and aliases" \
+    "source profile.apex
+echo \$SOURCED_VAR
+scmd" \
+    "apex_rules
+SourcedAlias" \
+    "contains"
+
+# 63. Configuration: dot (.) synonym for source
+printf "export DOT_VAR=dot_success\n" > "$TEST_DIR/dot_profile.apex"
+run_test "Configuration: dot command is synonym for source" \
+    ". dot_profile.apex
+echo \$DOT_VAR" \
+    "dot_success" \
+    "exact"
+
+# 64. Configuration: source without args reports error
+run_test "Configuration: source without args reports usage" \
+    "source" \
+    "source: filename argument required" \
+    "contains"
+
+# 65. Job Control: jobs displays Running status
+run_test "Job Control: jobs displays Running status" \
+    "sleep 5 &
+jobs" \
+    "Running" \
+    "contains"
+
+# 66. Job Control: kill sends signal by %id
+run_test "Job Control: kill sends signal by %id" \
+    "sleep 30 &
+kill %1" \
+    "[1] " \
+    "contains"
+
+# 67. Job Control: kill with explicit signal flag
+run_test "Job Control: kill with explicit signal flag" \
+    "sleep 30 &
+kill -9 %1" \
+    "[1] " \
+    "contains"
+
+# 68. Job Control: kill invalid job ID reports error
+run_test "Job Control: kill invalid job ID reports error" \
+    "kill %99" \
+    "no such job" \
+    "contains"
+
+# 69. Job Control: bg command targets background job
+run_test "Job Control: bg command targets background job" \
+    "sleep 10 &
+bg %1" \
+    "sleep 10" \
+    "contains"
+
+# 70. Job Control: fg without matching job reports error
+run_test "Job Control: fg without matching job reports error" \
+    "fg %99" \
+    "no such job" \
+    "contains"
+
 echo -e "${BLUE}========================================${NC}"
 if [ "$FAILED" -eq 0 ]; then
     echo -e "${GREEN}All $TOTAL tests passed successfully!${NC}"
@@ -578,4 +642,5 @@ else
     echo -e "${RED}Test Results: $PASSED passed, $FAILED failed out of $TOTAL.${NC}"
     exit 1
 fi
+
 

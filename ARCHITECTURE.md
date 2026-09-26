@@ -80,16 +80,27 @@ typedef struct {
 * **Teardown**: The caller (`lsh_loop`) is strictly responsible for invoking `lsh_free_tokens(tokens)`, which frees each `text`, each `ShellToken`, and the array container.
 * **Separation of Expansion**: Expansion occurs at command execution time, not during initial line tokenization. This guarantees that commands chained via `;` or `&&` reflect the updated `$?` and environment variables modified by preceding commands on the same line.
 
-### 3.2 Background Job Table (`Job`)
+### 3.2 POSIX Job Table & State Machine (`Job`)
 ```c
+typedef enum {
+    JOB_RUNNING,
+    JOB_STOPPED
+} JobStatus;
+
 typedef struct Job {
     int id;              // Logical job identifier (1, 2, 3...)
     pid_t pid;           // Operating system PID (or process group leader)
     char *cmd_name;      // Heap-allocated copy of the original command string
+    JobStatus status;    // Execution state: JOB_RUNNING or JOB_STOPPED
     struct Job *next;    // Singly linked list pointer
 } Job;
 ```
-* **Concurrency Safety**: Background jobs are reaped synchronously inside `jobs_reap()` at the start of each REPL cycle and before executing built-ins like `jobs`. This avoids async-signal-safety violations (e.g. calling `printf` or `malloc`/`free` inside a `SIGCHLD` handler).
+* **Process Group Management**: When launching jobs (`lsh_launch` and `lsh_execute_pipeline`), child processes are assigned their own process group via `setpgid()`. The shell delegates foreground terminal control using `tcsetpgrp(STDIN_FILENO, pgroup)` and reclaims it when the child terminates or stops.
+* **Job Suspension (`Ctrl+Z`)**: When a foreground child receives `SIGTSTP`, `waitpid(pid, &status, WUNTRACED)` detects `WIFSTOPPED(status)`. The child is immediately enqueued into the job list with status `JOB_STOPPED` and reported to the terminal.
+* **Job Resumption**:
+  - `fg [job_id]`: Brings a stopped or background job to the foreground, sends `SIGCONT` if stopped, hands off the terminal via `tcsetpgrp`, and waits synchronously.
+  - `bg [job_id]`: Sends `SIGCONT` to a stopped job, transitioning it to `JOB_RUNNING` in the background.
+* **Concurrency Safety**: Background and stopped jobs are harvested non-blockingly via `waitpid(..., WNOHANG | WUNTRACED | WCONTINUED)` at each REPL iteration.
 * **ID Compaction**: When the job list empties out completely, `next_job_id` resets back to 1.
 
 ### 3.3 Alias Mapping Table (`Alias`)

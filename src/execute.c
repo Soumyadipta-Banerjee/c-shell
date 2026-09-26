@@ -21,7 +21,7 @@
 int g_last_exit_status = 0;
 int g_should_exit = 0;
 
-static char *build_cmd_str(char **args)
+static char *build_cmd_str(char **args, int is_bg)
 {
     size_t len = 0;
     for (int i = 0; args[i] != NULL; i++)
@@ -32,7 +32,7 @@ static char *build_cmd_str(char **args)
     char *res = malloc(len);
     if (!res)
     {
-        return strdup("job &");
+        return strdup(is_bg ? "job &" : "job");
     }
     res[0] = '\0';
     for (int i = 0; args[i] != NULL; i++)
@@ -43,7 +43,10 @@ static char *build_cmd_str(char **args)
             strcat(res, " ");
         }
     }
-    strcat(res, " &");
+    if (is_bg)
+    {
+        strcat(res, " &");
+    }
     return res;
 }
 
@@ -148,6 +151,7 @@ int lsh_launch(char **args, int is_bg)
     pid = fork();
     if (pid == 0)
     {
+        setpgid(0, 0);
         if (is_bg)
         {
             signal(SIGINT, SIG_IGN);
@@ -190,18 +194,29 @@ int lsh_launch(char **args, int is_bg)
     }
     else
     {
+        setpgid(pid, pid);
         if (is_bg)
         {
-            char *cmd_str = build_cmd_str(args);
+            char *cmd_str = build_cmd_str(args, 1);
             jobs_add(pid, cmd_str);
             free(cmd_str);
             return 0;
+        }
+
+        if (isatty(STDIN_FILENO))
+        {
+            tcsetpgrp(STDIN_FILENO, pid);
         }
 
         do
         {
             waitpid(pid, &status, WUNTRACED);
         } while (!WIFEXITED(status) && !WIFSIGNALED(status) && !WIFSTOPPED(status));
+
+        if (isatty(STDIN_FILENO))
+        {
+            tcsetpgrp(STDIN_FILENO, getpgrp());
+        }
 
         if (WIFSIGNALED(status))
         {
@@ -212,7 +227,15 @@ int lsh_launch(char **args, int is_bg)
         }
         else if (WIFSTOPPED(status))
         {
-            printf("\n[%d] Stopped\n", pid);
+            char *cmd_str = build_cmd_str(args, 0);
+            int jid = jobs_add_stopped(pid, cmd_str);
+            printf("\n[%d]+  Stopped                 %s\n", jid, cmd_str);
+            fflush(stdout);
+            free(cmd_str);
+
+            sigaction(SIGINT, &sa_orig_int, NULL);
+            sigaction(SIGTSTP, &sa_orig_tstp, NULL);
+            return 128 + WSTOPSIG(status);
         }
 
         sigaction(SIGINT, &sa_orig_int, NULL);
@@ -244,7 +267,7 @@ int lsh_execute_pipeline(char ***cmd_args, int num_cmds, int is_bg)
         }
     }
 
-    pid_t *pids = malloc(sizeof(pid_t) * num_cmds);
+    pid_t *pids = calloc(num_cmds, sizeof(pid_t));
     if (!pids)
     {
         fprintf(stderr, "lsh: allocation error\n");
@@ -267,6 +290,15 @@ int lsh_execute_pipeline(char ***cmd_args, int num_cmds, int is_bg)
         pids[i] = fork();
         if (pids[i] == 0)
         {
+            if (i == 0)
+            {
+                setpgid(0, 0);
+            }
+            else
+            {
+                setpgid(0, pids[0]);
+            }
+
             if (is_bg)
             {
                 signal(SIGINT, SIG_IGN);
@@ -341,6 +373,17 @@ int lsh_execute_pipeline(char ***cmd_args, int num_cmds, int is_bg)
             }
             return 1;
         }
+        else
+        {
+            if (i == 0)
+            {
+                setpgid(pids[0], pids[0]);
+            }
+            else
+            {
+                setpgid(pids[i], pids[0]);
+            }
+        }
     }
 
     for (int i = 0; i < 2 * num_pipes; i++)
@@ -350,11 +393,16 @@ int lsh_execute_pipeline(char ***cmd_args, int num_cmds, int is_bg)
 
     if (is_bg)
     {
-        char *cmd_str = build_cmd_str(cmd_args[0]);
+        char *cmd_str = build_cmd_str(cmd_args[0], 1);
         jobs_add(pids[num_cmds - 1], cmd_str);
         free(cmd_str);
         free(pids);
         return 0;
+    }
+
+    if (isatty(STDIN_FILENO))
+    {
+        tcsetpgrp(STDIN_FILENO, pids[0]);
     }
 
     int any_signaled = 0;
@@ -378,6 +426,11 @@ int lsh_execute_pipeline(char ***cmd_args, int num_cmds, int is_bg)
         {
             any_signaled = 1;
         }
+    }
+
+    if (isatty(STDIN_FILENO))
+    {
+        tcsetpgrp(STDIN_FILENO, getpgrp());
     }
 
     if (any_signaled)
@@ -520,7 +573,7 @@ int lsh_execute(char **args, int is_bg)
                 }
                 else if (pid > 0)
                 {
-                    char *cmd_str = build_cmd_str(args);
+                    char *cmd_str = build_cmd_str(args, 1);
                     jobs_add(pid, cmd_str);
                     free(cmd_str);
                     return 0;

@@ -21,6 +21,8 @@ This document outlines the master roadmap for evolving `c-shell` into **Apex She
 │ Phase 5    │ Interactive Line Editor & Tab Autocompletion (Linenoise)  │
 ├────────────┼───────────────────────────────────────────────────────────┤
 │ Phase 6    │ Proactive Safety Shield & Command Aliases                 │
+├────────────┼───────────────────────────────────────────────────────────┤
+│ Phase 7    │ POSIX Job Control (fg/bg/kill/Ctrl+Z) & Startup Profile   │
 └────────────┴───────────────────────────────────────────────────────────┘
 ```
 
@@ -194,9 +196,39 @@ Protect users from catastrophic accidental commands and provide user-defined ali
 
 ---
 
+## Phase 7: POSIX Job Control & Startup Profile
+
+### Objectives
+Turn `apex-shell` into a complete process orchestrator with full POSIX job control (foreground/background switching, interactive job suspension via `Ctrl+Z`, process groups) and startup environment configuration via `~/.apexrc`.
+
+### Requirements & Specifications
+1. **Full Job Lifecycle & Suspension**:
+   - `JobStatus`: Distinguish between `JOB_RUNNING` and `JOB_STOPPED`.
+   - Intercept `WIFSTOPPED(status)` in `waitpid(..., WUNTRACED)` when child receives `SIGTSTP` (`Ctrl+Z`).
+   - Add suspended child to job table and output formatted status `[id]+  Stopped  <cmd>`.
+   - Non-blocking asynchronous status harvesting with `waitpid(..., WNOHANG | WUNTRACED | WCONTINUED)`.
+2. **Foreground & Background Commands (`fg` & `bg`)**:
+   - `fg [job_id]`: Brings job to foreground terminal, restores terminal process group via `tcsetpgrp()`, sends `SIGCONT` if stopped, waits for completion, and restores terminal to shell.
+   - `bg [job_id]`: Resumes stopped job in background via `SIGCONT` and transitions state to `JOB_RUNNING`.
+3. **Signal Sender (`kill`)**:
+   - `kill [-signal] pid | %job_id`: Supports targeting jobs by logical `%id` or OS `pid`, supporting numeric (`-9`, `-15`) and symbolic signals (`-KILL`, `-TERM`, `-STOP`, `-CONT`, `-INT`).
+4. **Startup Configuration (`source`, `.`, and `~/.apexrc`)**:
+   - `source <file>` / `. <file>`: Reads and executes commands line-by-line within the current shell process, allowing variable exports, aliases, and functions to persist.
+   - Interactive startup automatically checks and loads `~/.apexrc` if present.
+
+### Implementation Checklist
+- [x] Update `include/jobs.h` and `src/jobs.c` with `JobStatus`, stopped job tracking, and `lsh_fg`, `lsh_bg`, `lsh_kill`.
+- [x] Implement process group management (`setpgid`) and terminal hand-off (`tcsetpgrp`) in `src/execute.c`.
+- [x] Implement `source` and `.` built-ins in `src/builtins.c`.
+- [x] Auto-load `~/.apexrc` on interactive startup in `src/main.c`.
+- [x] Add automated tests for `source`, `.`, `jobs` status, `kill %id`, `bg`, and `fg` (tests 62-70).
+
+---
+
 ## 🧪 Testing & Verification Strategy
 
 Every phase must maintain:
 * **Zero Compiler Warnings**: `-Wall -Wextra -pedantic -std=c99 -O2`.
 * **Zero Memory Leaks**: Verified using AddressSanitizer (`-fsanitize=address`).
 * **Continuous Integration**: GitHub Actions CI workflow running `make && make test` on all pull requests and pushes.
+

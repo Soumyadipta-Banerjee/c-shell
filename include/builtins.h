@@ -15,6 +15,10 @@ int lsh_history(char **args);
 int lsh_alias(char **args);
 int lsh_unalias(char **args);
 int lsh_safemode(char **args);
+int lsh_fg(char **args);
+int lsh_bg(char **args);
+int lsh_kill(char **args);
+int lsh_source(char **args);
 
 int lsh_num_builtins(void);
 

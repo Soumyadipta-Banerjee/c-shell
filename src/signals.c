@@ -32,4 +32,13 @@ void lsh_init_signals(void)
     sigemptyset(&sa_tstp.sa_mask);
     sa_tstp.sa_flags = 0;
     sigaction(SIGTSTP, &sa_tstp, NULL);
+
+    /* Ignore terminal I/O signals to safely hand off foreground control */
+    struct sigaction sa_ign;
+    memset(&sa_ign, 0, sizeof(sa_ign));
+    sa_ign.sa_handler = SIG_IGN;
+    sigemptyset(&sa_ign.sa_mask);
+    sa_ign.sa_flags = 0;
+    sigaction(SIGTTIN, &sa_ign, NULL);
+    sigaction(SIGTTOU, &sa_ign, NULL);
 }

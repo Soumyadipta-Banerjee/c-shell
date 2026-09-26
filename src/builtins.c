@@ -8,10 +8,12 @@
 #include "history.h"
 #include "alias.h"
 #include "safety.h"
+#include "parser.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
+#include <ctype.h>
 
 extern char **environ;
 
@@ -28,7 +30,12 @@ char *builtin_str[] = {
     "history",
     "alias",
     "unalias",
-    "safemode"
+    "safemode",
+    "fg",
+    "bg",
+    "kill",
+    "source",
+    "."
 };
 
 int (*builtin_func[])(char **) = {
@@ -44,7 +51,12 @@ int (*builtin_func[])(char **) = {
     &lsh_history,
     &lsh_alias,
     &lsh_unalias,
-    &lsh_safemode
+    &lsh_safemode,
+    &lsh_fg,
+    &lsh_bg,
+    &lsh_kill,
+    &lsh_source,
+    &lsh_source
 };
 
 int lsh_num_builtins(void)
@@ -101,12 +113,14 @@ int lsh_help(char **args)
     printf("\nFeatures supported:\n");
     printf("  - Safety Shield:    safemode [on|off|status] (blocks rm -rf / or dangerous targets)\n");
     printf("  - Aliases:          alias name='val', unalias name\n");
+    printf("  - Job Control:      fg [%%id], bg [%%id], kill [-sig] pid|%%id, jobs\n");
+    printf("  - Configuration:    source <file>, . <file> (loads profiles like ~/.apexrc)\n");
     printf("  - Observability:    time <cmd> (rusage profiler), sysinfo (proc dashboard)\n");
     printf("  - Intelligence:     Did-you-mean suggestions on command typos\n");
     printf("  - Scripting:        apex-shell script.apex or apex-shell -c \"commands\"\n");
     printf("  - History:          history (list), history N (last N), history -c (clear)\n");
     printf("  - Command Chaining: ; (seq), && (and), || (or)\n");
-    printf("  - Background Jobs:  & (async), jobs (list active)\n");
+    printf("  - Background Jobs:  & (async), jobs (list active and stopped)\n");
     printf("  - Environment:      export KEY=VALUE, unset KEY, env\n");
     printf("  - Pipelines:        cmd1 | cmd2 | ... | cmdN\n");
     printf("  - I/O Redirection:  < (input), > (output), >> (append)\n");
@@ -182,3 +196,64 @@ int lsh_env(char **args)
     }
     return 0;
 }
+
+int lsh_source(char **args)
+{
+    if (args[1] == NULL)
+    {
+        fprintf(stderr, "apex-shell: source: filename argument required\n");
+        return 1;
+    }
+
+    char filepath[1024];
+    if (args[1][0] == '~' && (args[1][1] == '/' || args[1][1] == '\0'))
+    {
+        const char *home = getenv("HOME");
+        if (home)
+        {
+            snprintf(filepath, sizeof(filepath), "%s%s", home, args[1] + 1);
+        }
+        else
+        {
+            snprintf(filepath, sizeof(filepath), "%s", args[1]);
+        }
+    }
+    else
+    {
+        snprintf(filepath, sizeof(filepath), "%s", args[1]);
+    }
+
+    FILE *f = fopen(filepath, "r");
+    if (!f)
+    {
+        perror("apex-shell: source");
+        return 1;
+    }
+
+    char *line = NULL;
+    size_t len = 0;
+    ssize_t read_bytes;
+
+    while (!g_should_exit && (read_bytes = getline(&line, &len, f)) != -1)
+    {
+        line[strcspn(line, "\r\n")] = '\0';
+        char *p = line;
+        while (*p && isspace((unsigned char)*p))
+        {
+            p++;
+        }
+        if (*p == '\0' || *p == '#')
+        {
+            continue;
+        }
+
+        ShellToken **tokens = lsh_split_line(p);
+        lsh_execute_line(tokens);
+        lsh_free_tokens(tokens);
+    }
+
+    free(line);
+    fclose(f);
+    return g_last_exit_status;
+}
+
