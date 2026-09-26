@@ -269,6 +269,67 @@ else
     echo -e "${RED}[FAIL]${NC}"
 fi
 
+# 23. Chaining: Semicolon (;) sequential execution
+run_test "Chaining: semicolon (;) executes in sequence" \
+    "echo first; echo second; echo third" \
+    "first
+second
+third" \
+    "exact"
+
+# 24. Chaining: Logical AND (&&) executes on success
+run_test "Chaining: AND (&&) executes next on success" \
+    "true && echo and_ok" \
+    "and_ok" \
+    "exact"
+
+# 25. Chaining: Logical AND (&&) skips on failure
+run_test "Chaining: AND (&&) skips next on failure" \
+    "false && echo unreachable || echo reached" \
+    "reached" \
+    "exact"
+
+# 26. Chaining: Logical OR (||) executes on failure
+run_test "Chaining: OR (||) executes on failure" \
+    "false || echo fallback" \
+    "fallback" \
+    "exact"
+
+# 27. Chaining: Logical OR (||) skips on success
+run_test "Chaining: OR (||) skips next on success" \
+    "true || echo unreachable
+echo after" \
+    "after" \
+    "exact"
+
+# 28. Expansion: $? reflects previous command exit code
+run_test "Expansion: \$? reflects previous command status" \
+    "false ; echo \$? ; true ; echo \$?" \
+    "1
+0" \
+    "exact"
+
+# 29. Expansion: $VAR expands and single quotes preserve literal
+run_test "Expansion: \$VAR expands and single quotes preserve" \
+    "echo \$USER
+echo '\$USER'" \
+    "$USER
+\$USER" \
+    "exact"
+
+# 30. Built-in: exit [code] sets shell exit code
+TOTAL=$((TOTAL + 1))
+printf "Test %2d: %-50s " "$TOTAL" "Built-in: exit with custom status code (exit 37)"
+printf "exit 37\n" | "$SHELL_BIN" > /dev/null 2>&1
+EXIT_VAL=$?
+if [ "$EXIT_VAL" -eq 37 ]; then
+    PASSED=$((PASSED + 1))
+    echo -e "${GREEN}[PASS]${NC}"
+else
+    FAILED=$((FAILED + 1))
+    echo -e "${RED}[FAIL]${NC} (got $EXIT_VAL, expected 37)"
+fi
+
 echo -e "${BLUE}========================================${NC}"
 if [ "$FAILED" -eq 0 ]; then
     echo -e "${GREEN}All $TOTAL tests passed successfully!${NC}"
@@ -277,4 +338,3 @@ else
     echo -e "${RED}Test Results: $PASSED passed, $FAILED failed out of $TOTAL.${NC}"
     exit 1
 fi
-
