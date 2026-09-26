@@ -1,5 +1,5 @@
 CC = gcc
-CFLAGS = -Wall -Wextra -g
+CFLAGS = -Wall -Wextra -pedantic -std=c99 -O2
 TARGET = c-shell
 SRC = shell.c
 
@@ -9,7 +9,7 @@ $(TARGET): $(SRC)
 	$(CC) $(CFLAGS) -o $(TARGET) $(SRC)
 
 clean:
-	rm -f $(TARGET) *.o
+	rm -f $(TARGET) my_shell *.o
 
 run: all
 	./$(TARGET)
