@@ -55,8 +55,16 @@ c-shell/
 │   └── workflows/
 │       └── ci.yml     # Automated CI pipeline
 ├── Makefile           # Build and test rules
+├── ARCHITECTURE.md    # System design, memory ownership, and extensibility guide
+├── ROADMAP.md         # Long-term feature specifications and engineering milestones
 └── README.md
 ```
+
+## Documentation
+
+- **[System Architecture (ARCHITECTURE.md)](ARCHITECTURE.md)**: In-depth breakdown of component boundaries, execution dataflow, memory ownership contracts, and extensibility patterns.
+- **[Long-term Product Roadmap (ROADMAP.md)](ROADMAP.md)**: Detailed phase-by-phase specifications for systems observability, algorithmic intelligence, scripting, and safety shields.
+
 
 ## Getting Started
 
