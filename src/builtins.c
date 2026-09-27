@@ -16,6 +16,7 @@
 #include <ctype.h>
 
 extern char **environ;
+void lsh_record_frecency(const char *path);
 
 char *builtin_str[] = {
     "cd",
@@ -35,7 +36,11 @@ char *builtin_str[] = {
     "bg",
     "kill",
     "source",
-    "."
+    ".",
+    "pushd",
+    "popd",
+    "dirs",
+    "z"
 };
 
 int (*builtin_func[])(char **) = {
@@ -56,7 +61,11 @@ int (*builtin_func[])(char **) = {
     &lsh_bg,
     &lsh_kill,
     &lsh_source,
-    &lsh_source
+    &lsh_source,
+    &lsh_pushd,
+    &lsh_popd,
+    &lsh_dirs,
+    &lsh_z
 };
 
 int lsh_num_builtins(void)
@@ -81,6 +90,7 @@ int lsh_cd(char **args)
         perror("lsh: cd");
         return 1;
     }
+    lsh_record_frecency(target);
     return 0;
 }
 
@@ -111,6 +121,7 @@ int lsh_help(char **args)
         printf("  %s\n", builtin_str[i]);
     }
     printf("\nFeatures supported:\n");
+    printf("  - Navigation:       pushd <dir>, popd, dirs, z <query> (frecency jump)\n");
     printf("  - Safety Shield:    safemode [on|off|status] (blocks rm -rf / or dangerous targets)\n");
     printf("  - Aliases:          alias name='val', unalias name\n");
     printf("  - Job Control:      fg [%%id], bg [%%id], kill [-sig] pid|%%id, jobs\n");
@@ -255,5 +266,197 @@ int lsh_source(char **args)
     free(line);
     fclose(f);
     return g_last_exit_status;
+}
+
+#define LSH_DIR_STACK_MAX 64
+static char *s_dir_stack[LSH_DIR_STACK_MAX];
+static int s_dir_stack_count = 0;
+
+typedef struct {
+    char *path;
+    int score;
+} FrecencyEntry;
+
+#define MAX_FRECENCY 128
+static FrecencyEntry s_frecency[MAX_FRECENCY];
+static int s_frecency_count = 0;
+
+void lsh_record_frecency(const char *path)
+{
+    if (!path || path[0] == '\0') return;
+    char resolved[1024];
+    if (realpath(path, resolved) == NULL)
+    {
+        strncpy(resolved, path, sizeof(resolved) - 1);
+        resolved[sizeof(resolved) - 1] = '\0';
+    }
+
+    for (int i = 0; i < s_frecency_count; i++)
+    {
+        if (strcmp(s_frecency[i].path, resolved) == 0)
+        {
+            s_frecency[i].score += 5;
+            return;
+        }
+    }
+
+    if (s_frecency_count < MAX_FRECENCY)
+    {
+        s_frecency[s_frecency_count].path = strdup(resolved);
+        s_frecency[s_frecency_count].score = 10;
+        s_frecency_count++;
+    }
+    else
+    {
+        int min_idx = 0;
+        for (int i = 1; i < s_frecency_count; i++)
+        {
+            if (s_frecency[i].score < s_frecency[min_idx].score)
+            {
+                min_idx = i;
+            }
+        }
+        free(s_frecency[min_idx].path);
+        s_frecency[min_idx].path = strdup(resolved);
+        s_frecency[min_idx].score = 10;
+    }
+}
+
+int lsh_dirs(char **args)
+{
+    (void)args;
+    char cwd[1024];
+    if (!getcwd(cwd, sizeof(cwd)))
+    {
+        perror("apex-shell: dirs");
+        return 1;
+    }
+    printf("%s", cwd);
+    for (int i = s_dir_stack_count - 1; i >= 0; i--)
+    {
+        printf(" %s", s_dir_stack[i]);
+    }
+    printf("\n");
+    fflush(stdout);
+    return 0;
+}
+
+int lsh_pushd(char **args)
+{
+    const char *target = args[1];
+    if (!target)
+    {
+        fprintf(stderr, "apex-shell: pushd: no other directory\n");
+        return 1;
+    }
+
+    if (s_dir_stack_count >= LSH_DIR_STACK_MAX)
+    {
+        fprintf(stderr, "apex-shell: pushd: directory stack full\n");
+        return 1;
+    }
+
+    char cwd[1024];
+    if (!getcwd(cwd, sizeof(cwd)))
+    {
+        perror("apex-shell: pushd");
+        return 1;
+    }
+
+    char resolved[1024];
+    if (target[0] == '~' && (target[1] == '/' || target[1] == '\0'))
+    {
+        const char *home = getenv("HOME");
+        if (home)
+        {
+            snprintf(resolved, sizeof(resolved), "%s%s", home, target + 1);
+        }
+        else
+        {
+            snprintf(resolved, sizeof(resolved), "%s", target);
+        }
+    }
+    else
+    {
+        snprintf(resolved, sizeof(resolved), "%s", target);
+    }
+
+    if (chdir(resolved) != 0)
+    {
+        perror("apex-shell: pushd");
+        return 1;
+    }
+
+    s_dir_stack[s_dir_stack_count++] = strdup(cwd);
+    lsh_record_frecency(resolved);
+    return lsh_dirs(NULL);
+}
+
+int lsh_popd(char **args)
+{
+    (void)args;
+    if (s_dir_stack_count <= 0)
+    {
+        fprintf(stderr, "apex-shell: popd: directory stack empty\n");
+        return 1;
+    }
+
+    char *target = s_dir_stack[--s_dir_stack_count];
+    if (chdir(target) != 0)
+    {
+        perror("apex-shell: popd");
+        free(target);
+        return 1;
+    }
+
+    lsh_record_frecency(target);
+    free(target);
+    return lsh_dirs(NULL);
+}
+
+int lsh_z(char **args)
+{
+    if (args[1] == NULL)
+    {
+        for (int i = 0; i < s_frecency_count; i++)
+        {
+            printf("%4d  %s\n", s_frecency[i].score, s_frecency[i].path);
+        }
+        fflush(stdout);
+        return 0;
+    }
+
+    const char *query = args[1];
+    int best_idx = -1;
+    int best_score = -1;
+
+    for (int i = 0; i < s_frecency_count; i++)
+    {
+        if (strstr(s_frecency[i].path, query) != NULL)
+        {
+            if (s_frecency[i].score > best_score)
+            {
+                best_score = s_frecency[i].score;
+                best_idx = i;
+            }
+        }
+    }
+
+    if (best_idx == -1)
+    {
+        fprintf(stderr, "apex-shell: z: no matching directory for '%s'\n", query);
+        return 1;
+    }
+
+    if (chdir(s_frecency[best_idx].path) != 0)
+    {
+        perror("apex-shell: z");
+        return 1;
+    }
+
+    s_frecency[best_idx].score += 5;
+    printf("%s\n", s_frecency[best_idx].path);
+    fflush(stdout);
+    return 0;
 }
 

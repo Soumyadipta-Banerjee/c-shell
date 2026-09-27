@@ -634,6 +634,63 @@ run_test "Job Control: fg without matching job reports error" \
     "no such job" \
     "contains"
 
+# 71. Command Substitution: basic $() captures command output
+run_test "Substitution: basic \$() captures stdout" \
+    "echo Hello \$(echo World)" \
+    "Hello World" \
+    "exact"
+
+# 72. Command Substitution: pipeline inside $()
+run_test "Substitution: pipeline inside \$()" \
+    "echo Result: \$(echo 'apex shell' | tr a-z A-Z)" \
+    "Result: APEX SHELL" \
+    "exact"
+
+# 73. Command Substitution: inside double quotes
+run_test "Substitution: inside double quotes" \
+    "echo \"Sub: \$(echo nested_output)\"" \
+    "Sub: nested_output" \
+    "exact"
+
+# 74. Command Substitution: backticks `cmd` syntax
+run_test "Substitution: backticks command execution" \
+    "echo Backtick: \`echo backtick_works\`" \
+    "Backtick: backtick_works" \
+    "exact"
+
+# 75. Navigation: dirs displays working directory
+run_test "Navigation: dirs displays working directory" \
+    "dirs" \
+    "$TEST_DIR" \
+    "contains"
+
+# 76. Navigation: pushd and popd traverse stack
+mkdir -p "$TEST_DIR/sub1"
+run_test "Navigation: pushd and popd traverse stack" \
+    "pushd sub1
+pwd
+popd
+pwd" \
+    "$TEST_DIR/sub1
+$TEST_DIR" \
+    "contains"
+
+# 77. Navigation: popd on empty stack reports error
+run_test "Navigation: popd on empty stack reports error" \
+    "popd" \
+    "directory stack empty" \
+    "contains"
+
+# 78. Navigation: z jumps to visited directory
+mkdir -p "$TEST_DIR/my_special_dir"
+run_test "Navigation: z jumps to visited directory" \
+    "cd my_special_dir
+cd ..
+z special
+pwd" \
+    "my_special_dir" \
+    "contains"
+
 echo -e "${BLUE}========================================${NC}"
 if [ "$FAILED" -eq 0 ]; then
     echo -e "${GREEN}All $TOTAL tests passed successfully!${NC}"
@@ -642,5 +699,6 @@ else
     echo -e "${RED}Test Results: $PASSED passed, $FAILED failed out of $TOTAL.${NC}"
     exit 1
 fi
+
 
 

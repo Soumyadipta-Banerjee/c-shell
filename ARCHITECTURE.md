@@ -125,6 +125,14 @@ typedef struct Alias {
 * **Interactive vs Automated**: Prompts the user with `[y/N]` confirmation in interactive mode. Under non-interactive mode or automated scripts, execution is blocked with exit code 1 to protect the host machine.
 * **Runtime Toggle**: Configurable at runtime via `safemode on`, `safemode off`, or `safemode status`.
 
+### 3.6 Subshell Command Substitution (`$(...)` and `` `...` ``)
+* **Anonymous Pipe IPC**: `capture_command_output()` creates an anonymous pipe via `pipe()`, forks a subshell child, redirects child `stdout` to the pipe write end, and executes the inner command line using `lsh_split_line()` and `lsh_execute_line()`.
+* **Output Processing**: The parent process drains the read end of the pipe into a dynamically resizing heap buffer, awaits child termination (`waitpid`), strips trailing `\r`/`\n` characters per POSIX specification, and splices the resulting string into the expanding token stream.
+
+### 3.7 Directory Stack & Frecency State (`pushd`, `popd`, `dirs`, `z`)
+* **Directory Stack**: Static LIFO array (`s_dir_stack[64]`) storing heap-allocated directory paths. `pushd` saves current directory and changes to target; `popd` returns to previous stack entry.
+* **Frecency Matrix**: Maintains directory visits and dynamic weights in `s_frecency[128]`. Whenever directory changes succeed (`cd`, `pushd`, `popd`), scores increase. The `z` command performs ranked substring matching to execute instant jumps.
+
 ---
 
 ## 4. Upgradability & Extensibility Guidelines

@@ -10,6 +10,20 @@ A high-performance, portfolio-grade Unix shell written in C99 exploring POSIX sy
 
 ## Key Features
 
+- **Subshell Command Substitution (`$(cmd)` & `` `cmd` ``)**:
+  - Subshell execution with anonymous pipe stdout capturing and trailing newline stripping.
+  - Seamlessly handles arbitrary nested pipelines, chaining, and redirections (`echo $(cat file | grep pattern | wc -l)`).
+  - Preserves command substitution within double quotes (`"Count: $(ls | wc -l)"`) while preserving literal syntax inside single quotes.
+- **Live Terminal Syntax Highlighting**:
+  - Real-time ANSI token coloring rendered dynamically inside raw `termios` editing mode.
+  - Green for valid built-ins and executables, Red for unrecognized commands, Yellow for command options/flags (`-la`), Cyan for quoted strings, and Magenta for control operators (`|`, `&&`, `;`, `>`, `>>`).
+- **Interactive Reverse History Search (`Ctrl+R`)**:
+  - `(reverse-i-search)'<query>': <match>` prompt.
+  - Incremental substring search with backward cycling across previous commands on repeated `Ctrl+R`.
+  - Enter accepts and executes the match, while Esc or `Ctrl+G` cancels and restores original line buffer.
+- **Directory Stack & Frecency Navigation (`pushd`, `popd`, `dirs`, `z`)**:
+  - LIFO directory stack: `pushd <dir>` pushes current working directory and changes to target; `popd` pops top directory and jumps back; `dirs` displays current stack.
+  - Intelligent frecency jumping: `z <pattern>` dynamically ranks directories by visit frequency and recency for instant navigation without typing full paths.
 - **POSIX Terminal Job Control & Suspension**:
   - Full process group orchestration using `setpgid()` and foreground terminal delegation via `tcsetpgrp()`.
   - Foreground job suspension via `Ctrl+Z` (`SIGTSTP`), capturing `WIFSTOPPED` and registering jobs as `Stopped`.
@@ -57,6 +71,10 @@ A high-performance, portfolio-grade Unix shell written in C99 exploring POSIX sy
 - **Built-in Commands**:
   - `cd [dir]`: Changes directory (supports `~`, no args defaults to `$HOME`).
   - `pwd`: Prints the current working directory.
+  - `pushd <dir>`: Pushes current directory onto the stack and navigates to target.
+  - `popd`: Pops the top directory off the stack and changes to it.
+  - `dirs`: Displays the current directory stack.
+  - `z <pattern>`: Smart frecency directory jump to most frequent/recent matching directory.
   - `export KEY=VALUE`: Sets environment variables for the shell and child processes.
   - `unset KEY`: Unsets environment variables.
   - `env`: Lists active environment variables.
@@ -127,7 +145,7 @@ apex-shell/
 │   ├── signals.c      # Signal setup and prompt protection
 │   └── telemetry.c    # getrusage profiling and /proc system metrics parser
 ├── tests/
-│   └── test_shell.sh  # Automated test suite (61 test cases)
+│   └── test_shell.sh  # Automated test suite (78 test cases)
 ├── .github/
 │   └── workflows/
 │       └── ci.yml     # Automated CI pipeline
@@ -250,7 +268,24 @@ kill -9 %1             # Force kills job
 source ~/.apexrc       # Dynamically loads variables and aliases
 . custom_profile.apex  # Dot notation synonym for source
 
-# Interactive Line Editing & Autocompletion (in terminal)
+# Subshell Command Substitution
+echo "Date is $(date +%Y-%m-%d)"
+COUNT=$(ls | wc -l)
+echo "Total files: $COUNT"
+echo `uname -s -r`
+
+# Directory Stack Navigation
+pushd /tmp             # Pushes current directory and switches to /tmp
+dirs                   # Displays: /tmp /home/soumya/apex-shell
+popd                   # Returns back to /home/soumya/apex-shell
+
+# Smart Frecency Directory Jump
+z apex                 # Instantly jumps to highest-ranked match for 'apex'
+
+# Interactive Line Editing & Syntax Highlighting (in terminal)
+# Real-time ANSI syntax colors: Green for valid commands, Red for invalid,
+# Yellow for flags, Cyan for strings, Magenta for operators.
+# [Ctrl+R] triggers reverse history search: (reverse-i-search)'query': match
 # [Tab] completes built-in commands and file paths
 # [Up/Down] arrows browse previous command history
 # [Left/Right] arrows navigate input buffer
@@ -293,7 +328,10 @@ exit 0
 
 ## Automated Testing
 
-The project includes an automated test suite ([tests/test_shell.sh](tests/test_shell.sh)) containing **70 test cases** covering:
+The project includes an automated test suite ([tests/test_shell.sh](tests/test_shell.sh)) containing **78 test cases** covering:
+- Subshell command substitution (`$(cmd)` and `` `cmd` ``) with pipe capturing
+- Directory stack operations (`pushd`, `popd`, `dirs`, empty stack error handling)
+- Frecency navigation (`z` smart directory jumping)
 - POSIX Terminal Job Control (`fg`, `bg`, `kill [-sig]`, `jobs`, `Ctrl+Z` suspension, process groups)
 - Startup Configuration & Profiles (`source <file>`, `. <file>`, auto-loading of `~/.apexrc`)
 - Interactive Line Editing & Autocompletion (`termios` raw mode, buffer traversal, tab completion)
@@ -303,7 +341,7 @@ The project includes an automated test suite ([tests/test_shell.sh](tests/test_s
 - Persistent History (`history` built-in, numerical limits, serialization)
 - Algorithmic Intelligence (Damerau-Levenshtein fuzzy matching, built-in and PATH typo suggestions, exit 127)
 - Systems Observability & Telemetry (`time` command rusage profiler, status preservation, `sysinfo` dashboard)
-- Built-in commands (`pwd`, `cd`, `export`, `unset`, `env`, `fg`, `bg`, `kill`, `source`, `.`, `alias`, `unalias`, `safemode`, `jobs`, `sysinfo`, `history`, `help`, `exit [code]`)
+- Built-in commands (`pwd`, `cd`, `pushd`, `popd`, `dirs`, `z`, `export`, `unset`, `env`, `fg`, `bg`, `kill`, `source`, `.`, `alias`, `unalias`, `safemode`, `jobs`, `sysinfo`, `history`, `help`, `exit [code]`)
 - Background processes (`&`), job tracking, and asynchronous zombie reaping
 - External command execution
 - Quoting behavior (single and double quotes with whitespace preservation)

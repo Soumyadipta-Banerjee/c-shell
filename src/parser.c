@@ -10,6 +10,7 @@
 #include <string.h>
 #include <ctype.h>
 #include <errno.h>
+#include <sys/wait.h>
 
 static char *get_git_branch(void)
 {
@@ -121,6 +122,81 @@ void lsh_print_prompt(void)
     fflush(stdout);
 }
 
+static char *capture_command_output(const char *cmd)
+{
+    int pipefd[2];
+    if (pipe(pipefd) < 0)
+    {
+        return strdup("");
+    }
+
+    pid_t pid = fork();
+    if (pid == 0)
+    {
+        close(pipefd[0]);
+        dup2(pipefd[1], STDOUT_FILENO);
+        close(pipefd[1]);
+
+        ShellToken **tokens = lsh_split_line((char *)cmd);
+        if (tokens)
+        {
+            lsh_execute_line(tokens);
+            lsh_free_tokens(tokens);
+        }
+        exit(g_last_exit_status);
+    }
+    else if (pid < 0)
+    {
+        close(pipefd[0]);
+        close(pipefd[1]);
+        return strdup("");
+    }
+
+    close(pipefd[1]);
+    size_t cap = 256;
+    size_t len = 0;
+    char *buf = malloc(cap);
+    if (!buf)
+    {
+        close(pipefd[0]);
+        waitpid(pid, NULL, 0);
+        return strdup("");
+    }
+
+    char chunk[256];
+    ssize_t bytes;
+    while ((bytes = read(pipefd[0], chunk, sizeof(chunk))) > 0)
+    {
+        while (len + bytes + 1 > cap)
+        {
+            cap *= 2;
+            char *new_buf = realloc(buf, cap);
+            if (!new_buf)
+            {
+                break;
+            }
+            buf = new_buf;
+        }
+        memcpy(buf + len, chunk, bytes);
+        len += bytes;
+    }
+    close(pipefd[0]);
+    int status;
+    waitpid(pid, &status, 0);
+    if (WIFEXITED(status))
+    {
+        g_last_exit_status = WEXITSTATUS(status);
+    }
+
+    // Strip trailing newlines (standard POSIX command substitution)
+    while (len > 0 && (buf[len - 1] == '\n' || buf[len - 1] == '\r'))
+    {
+        len--;
+    }
+    buf[len] = '\0';
+    return buf;
+}
+
 static char *expand_variables_in_string(const char *str)
 {
     size_t cap = strlen(str) + 64;
@@ -134,7 +210,74 @@ static char *expand_variables_in_string(const char *str)
     const char *p = str;
     while (*p)
     {
-        if (*p == '$')
+        if (*p == '$' && *(p + 1) == '(')
+        {
+            p += 2; // skip "$("
+            const char *start = p;
+            int depth = 1;
+            while (*p && depth > 0)
+            {
+                if (*p == '(') depth++;
+                else if (*p == ')') depth--;
+                if (depth > 0) p++;
+            }
+            size_t subcmd_len = p - start;
+            char subcmd[1024];
+            if (subcmd_len < sizeof(subcmd))
+            {
+                strncpy(subcmd, start, subcmd_len);
+                subcmd[subcmd_len] = '\0';
+                char *sub_out = capture_command_output(subcmd);
+                if (sub_out)
+                {
+                    size_t solen = strlen(sub_out);
+                    while (len + solen + 1 > cap)
+                    {
+                        cap *= 2;
+                        char *new_out = realloc(out, cap);
+                        if (!new_out) { free(sub_out); free(out); return NULL; }
+                        out = new_out;
+                    }
+                    memcpy(out + len, sub_out, solen);
+                    len += solen;
+                    free(sub_out);
+                }
+            }
+            if (*p == ')') p++;
+        }
+        else if (*p == '`')
+        {
+            p++; // skip '`'
+            const char *start = p;
+            while (*p && *p != '`')
+            {
+                p++;
+            }
+            size_t subcmd_len = p - start;
+            char subcmd[1024];
+            if (subcmd_len < sizeof(subcmd))
+            {
+                strncpy(subcmd, start, subcmd_len);
+                subcmd[subcmd_len] = '\0';
+                char *sub_out = capture_command_output(subcmd);
+                if (sub_out)
+                {
+                    size_t solen = strlen(sub_out);
+                    while (len + solen + 1 > cap)
+                    {
+                        cap *= 2;
+                        char *new_out = realloc(out, cap);
+                        if (!new_out) { free(sub_out); free(out); return NULL; }
+                        out = new_out;
+                    }
+                    memcpy(out + len, sub_out, solen);
+                    len += solen;
+                    free(sub_out);
+                }
+            }
+            if (*p == '`') p++;
+        }
+        else if (*p == '$')
         {
             p++;
             if (*p == '?')
@@ -393,7 +536,56 @@ ShellToken **lsh_split_line(char *line)
             while (*p && *p != ' ' && *p != '\t' && *p != '\r' && *p != '\n' &&
                    *p != ';' && *p != '|' && *p != '&' && *p != '<' && *p != '>')
             {
-                if (*p == '\'')
+                if (*p == '$' && *(p + 1) == '(')
+                {
+                    if (len + 2 >= cap)
+                    {
+                        cap *= 2;
+                        buf = realloc(buf, cap);
+                    }
+                    buf[len++] = *p++;
+                    buf[len++] = *p++;
+                    int depth = 1;
+                    while (*p && depth > 0)
+                    {
+                        if (*p == '(') depth++;
+                        else if (*p == ')') depth--;
+                        if (len + 1 >= cap)
+                        {
+                            cap *= 2;
+                            buf = realloc(buf, cap);
+                        }
+                        buf[len++] = *p++;
+                    }
+                }
+                else if (*p == '`')
+                {
+                    if (len + 1 >= cap)
+                    {
+                        cap *= 2;
+                        buf = realloc(buf, cap);
+                    }
+                    buf[len++] = *p++;
+                    while (*p && *p != '`')
+                    {
+                        if (len + 1 >= cap)
+                        {
+                            cap *= 2;
+                            buf = realloc(buf, cap);
+                        }
+                        buf[len++] = *p++;
+                    }
+                    if (*p == '`')
+                    {
+                        if (len + 1 >= cap)
+                        {
+                            cap *= 2;
+                            buf = realloc(buf, cap);
+                        }
+                        buf[len++] = *p++;
+                    }
+                }
+                else if (*p == '\'')
                 {
                     p++;
                     while (*p && *p != '\'')

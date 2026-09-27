@@ -23,6 +23,8 @@ This document outlines the master roadmap for evolving `c-shell` into **Apex She
 │ Phase 6    │ Proactive Safety Shield & Command Aliases                 │
 ├────────────┼───────────────────────────────────────────────────────────┤
 │ Phase 7    │ POSIX Job Control (fg/bg/kill/Ctrl+Z) & Startup Profile   │
+├────────────┼───────────────────────────────────────────────────────────┤
+│ Phase 8    │ Command Substitution $(), Syntax Colors, Ctrl+R, pushd/z  │
 └────────────┴───────────────────────────────────────────────────────────┘
 ```
 
@@ -222,6 +224,37 @@ Turn `apex-shell` into a complete process orchestrator with full POSIX job contr
 - [x] Implement `source` and `.` built-ins in `src/builtins.c`.
 - [x] Auto-load `~/.apexrc` on interactive startup in `src/main.c`.
 - [x] Add automated tests for `source`, `.`, `jobs` status, `kill %id`, `bg`, and `fg` (tests 62-70).
+
+---
+
+## Phase 8: Command Substitution, Live Highlighting & Navigation
+
+### Objectives
+Equip `apex-shell` with subshell command substitution (`$(...)` & `` `...` ``), live terminal syntax highlighting, interactive reverse history search (`Ctrl+R`), and directory stack/frecency jumping (`pushd`, `popd`, `dirs`, `z`).
+
+### Requirements & Specifications
+1. **Command Substitution**:
+   - Subshell fork and anonymous pipe capture for `$(command)` and `` `command` ``.
+   - Preserves arbitrary pipelines and multi-command streams inside substitution.
+   - Strips trailing newlines and splices stdout directly into expanded tokens.
+2. **Live Syntax Highlighting**:
+   - Colorizes terminal input line in real-time within raw `termios` engine.
+   - Green for valid built-ins/executables, Red for unknown commands.
+   - Yellow for flags (`-la`), Cyan for quoted strings, Magenta for operators (`|`, `&&`, `;`, `>`).
+3. **Interactive Reverse History Search (`Ctrl+R`)**:
+   - `(reverse-i-search)'<query>': <match>` prompt.
+   - Incremental substring search cycling backwards on repeated `Ctrl+R`.
+   - `Enter` accepts and executes, `Esc`/`Ctrl+G` cancels and restores input.
+4. **Directory Stack & Frecency (`pushd`, `popd`, `dirs`, `z`)**:
+   - `pushd <dir>`, `popd`, and `dirs` directory stack management.
+   - `z <query>` frecency directory jumper automatically learning visited paths.
+
+### Implementation Checklist
+- [x] Implement subshell output capture in `src/parser.c` for `$()` and `` `...` ``.
+- [x] Implement live syntax highlighting in `src/linereader.c`.
+- [x] Implement interactive `Ctrl+R` reverse search loop in `src/linereader.c`.
+- [x] Implement `pushd`, `popd`, `dirs`, and `z` in `src/builtins.c`.
+- [x] Add automated tests for substitution and directory navigation (tests 71-78).
 
 ---
 
