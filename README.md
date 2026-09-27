@@ -145,7 +145,21 @@ apex-shell/
 │   ├── signals.c      # Signal setup and prompt protection
 │   └── telemetry.c    # getrusage profiling and /proc system metrics parser
 ├── tests/
-│   └── test_shell.sh  # Automated test suite (78 test cases)
+│   ├── run_tests.sh       # Master test orchestrator
+│   ├── helpers/           # Reusable assertion library (test_framework.sh)
+│   ├── fixtures/          # Shared test scripts (.apex) and profile templates
+│   ├── integration/       # Domain-driven integration suites (78 tests)
+│   │   ├── test_builtins.sh
+│   │   ├── test_pipelines.sh
+│   │   ├── test_substitutions.sh
+│   │   ├── test_jobs.sh
+│   │   ├── test_safety.sh
+│   │   ├── test_observability.sh
+│   │   ├── test_fuzzy.sh
+│   │   └── test_scripting.sh
+│   └── unit/              # Algorithmic C unit tests (25 tests)
+│       ├── test_fuzzy.c
+│       └── test_alias.c
 ├── .github/
 │   └── workflows/
 │       └── ci.yml     # Automated CI pipeline
@@ -200,9 +214,12 @@ apex-shell/
    ./apex-shell -c "sysinfo && time sleep 0.1"
    ```
 
-5. **Run the automated test suite**:
+5. **Run tests**:
    ```bash
-   make test
+   make test       # Run all 8 integration suites (78 tests)
+   make test-fast  # Ultra-fast runner skipping sleep tests (< 1.5s)
+   make test-unit  # Algorithmic C unit tests (25 assertions)
+   make test-all   # Complete test suite: integration + unit (103 assertions)
    ```
 
 6. **Clean build artifacts**:
@@ -326,35 +343,40 @@ exit 0
 
 ---
 
-## Automated Testing
+## Automated Testing & Verification
 
-The project includes an automated test suite ([tests/test_shell.sh](tests/test_shell.sh)) containing **78 test cases** covering:
-- Subshell command substitution (`$(cmd)` and `` `cmd` ``) with pipe capturing
-- Directory stack operations (`pushd`, `popd`, `dirs`, empty stack error handling)
-- Frecency navigation (`z` smart directory jumping)
-- POSIX Terminal Job Control (`fg`, `bg`, `kill [-sig]`, `jobs`, `Ctrl+Z` suspension, process groups)
-- Startup Configuration & Profiles (`source <file>`, `. <file>`, auto-loading of `~/.apexrc`)
-- Interactive Line Editing & Autocompletion (`termios` raw mode, buffer traversal, tab completion)
-- Command Aliases (`alias`, `unalias`, recursive prevention, argument passing)
-- Proactive Safety Shield (`safemode`, catastrophic `rm` command blocking, confirmation checks)
-- Scripting & One-Liners (`-c` execution, `.apex` file execution, `#` comment ignoring, exit codes)
-- Persistent History (`history` built-in, numerical limits, serialization)
-- Algorithmic Intelligence (Damerau-Levenshtein fuzzy matching, built-in and PATH typo suggestions, exit 127)
-- Systems Observability & Telemetry (`time` command rusage profiler, status preservation, `sysinfo` dashboard)
-- Built-in commands (`pwd`, `cd`, `pushd`, `popd`, `dirs`, `z`, `export`, `unset`, `env`, `fg`, `bg`, `kill`, `source`, `.`, `alias`, `unalias`, `safemode`, `jobs`, `sysinfo`, `history`, `help`, `exit [code]`)
-- Background processes (`&`), job tracking, and asynchronous zombie reaping
-- External command execution
-- Quoting behavior (single and double quotes with whitespace preservation)
-- Command chaining (`&&`, `||`, `;`) and short-circuit evaluation
-- Variable expansion (`$VAR`, `${VAR}`, `$?`, `$$`, `~`) and literal preservation
-- I/O redirection (`<`, `>`, `>>`, combined input/output)
-- Multi-stage pipelines and stream filtering
-- Signal handling (`SIGINT` shell survival and child interruption)
-- Error handling and syntax validation
+Apex Shell features a modular, two-tier test architecture combining native **C unit tests** with domain-driven **black-box integration suites** managed by `tests/run_tests.sh`:
 
-Run tests anytime with:
+### Test Organization
+- **C Unit Tests (`tests/unit/`)**: 25 assertions testing pure algorithms directly in C:
+  - `test_fuzzy.c`: Damerau-Levenshtein distance calculation, transpositions, substitutions, and suggestion ranking.
+  - `test_alias.c`: In-memory alias dictionary, insertion, lookup, overwriting, unsetting, and teardown.
+- **Integration Test Suites (`tests/integration/`)**: 78 test cases partitioned across 8 dedicated domains:
+  - `test_builtins.sh`: Built-in commands (`pwd`, `cd`, `export`, `unset`, `env`, `dirs`, `pushd`, `popd`, `z`, `help`, `exit`).
+  - `test_pipelines.sh`: Arbitrary pipelines, I/O redirections (`<`, `>`, `>>`), and chaining operators (`;`, `&&`, `||`).
+  - `test_substitutions.sh`: Subshell command substitutions (`$(cmd)` & `` `cmd` ``), quoting (`''`, `""`), and variable expansions (`$VAR`, `${VAR}`, `$?`, `~`).
+  - `test_jobs.sh`: Background execution (`&`), job tracking (`jobs`), process signaling (`kill`), foreground/background control (`fg`, `bg`), and signal protection (`SIGINT`, `SIGTSTP`).
+  - `test_safety.sh`: Proactive safety shield (`safemode`), dangerous deletion prevention (`rm -rf /`), and command aliases (`alias`, `unalias`).
+  - `test_observability.sh`: Command execution profiler (`time`) and kernel telemetry dashboard (`sysinfo`).
+  - `test_fuzzy.sh`: Typo correction suggestions and POSIX exit code 127 handling.
+  - `test_scripting.sh`: Non-interactive one-liners (`-c`), script execution (`.apex`), comment parsing, and environment sourcing (`source`, `.`).
+
+### Test Execution Commands
 ```bash
+# Run all integration suites (78 tests)
 make test
+
+# Ultra-fast runner skipping sleep tests (< 1.5s)
+make test-fast
+
+# Compile and run native C algorithmic unit tests (25 assertions)
+make test-unit
+
+# Run specific integration suite (e.g. substitutions, builtins, jobs, safety)
+make test-suite SUITE=substitutions
+
+# Run the complete test battery (Integration + Unit = 103 assertions)
+make test-all
 ```
 
 ---

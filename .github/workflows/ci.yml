@@ -14,8 +14,11 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Build shell
-        run: make
+      - name: Build shell & test binaries
+        run: make all tests/unit/test_fuzzy tests/unit/test_alias
 
-      - name: Run test suite
+      - name: Run C unit test suite
+        run: make test-unit
+
+      - name: Run integration test suite
         run: make test

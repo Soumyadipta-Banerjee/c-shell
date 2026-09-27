@@ -1,0 +1,108 @@
+#!/usr/bin/env bash
+# ==============================================================================
+# Suite: Pipelines, Redirections & Chaining (tests/integration/test_pipelines.sh)
+# ==============================================================================
+
+set -u
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/../helpers/test_framework.sh"
+setup_test_env
+
+echo -e "${BLUE}▶ Running Suite: Pipelines, Redirection & Operators${NC}"
+
+# 1. Output redirection >
+run_test "output redirection (>) writes file" \
+    "echo \"output test\" > out.txt
+cat out.txt" \
+    "output test" \
+    "exact"
+
+# 2. Append redirection >>
+run_test "append redirection (>>) adds content" \
+    "echo \"first line\" > append.txt
+echo \"second line\" >> append.txt
+cat append.txt" \
+    "first line
+second line" \
+    "exact"
+
+# 3. Input redirection <
+echo "input file content" > "$TEST_DIR/input.txt"
+run_test "input redirection (<) reads file" \
+    "cat < input.txt" \
+    "input file content" \
+    "exact"
+
+# 4. Combined < and >
+echo "data to copy" > "$TEST_DIR/source.txt"
+run_test "combined input (<) and output (>)" \
+    "cat < source.txt > dest.txt
+cat dest.txt" \
+    "data to copy" \
+    "exact"
+
+# 5. 2-stage pipeline
+run_test "2-stage pipeline (echo | tr)" \
+    "echo \"pipeline test\" | tr \"a-z\" \"A-Z\"" \
+    "PIPELINE TEST" \
+    "exact"
+
+# 6. 3-stage pipeline
+run_test "3-stage pipeline (echo | tr | wc -l)" \
+    "echo \"one two three four\" | tr \" \" \"\n\" | wc -l" \
+    "4" \
+    "exact"
+
+# 7. Pipeline filtering with grep
+run_test "filtering stream with grep" \
+    "printf \"apple\nbanana\ncherry\n\" | grep banana" \
+    "banana" \
+    "exact"
+
+# 8. Redirection syntax error
+run_test "syntax error when redirection target missing" \
+    "echo test >" \
+    "syntax error near unexpected token 'newline'" \
+    "contains"
+
+# 9. Pipeline syntax error
+run_test "syntax error on invalid empty pipe stage" \
+    "ls | | grep" \
+    "syntax error near unexpected token '|'" \
+    "contains"
+
+# 10. Chaining semicolon ;
+run_test "semicolon (;) executes in sequence" \
+    "echo first; echo second; echo third" \
+    "first
+second
+third" \
+    "exact"
+
+# 11. Chaining AND && success
+run_test "AND (&&) executes next on success" \
+    "true && echo and_ok" \
+    "and_ok" \
+    "exact"
+
+# 12. Chaining AND && failure
+run_test "AND (&&) skips next on failure" \
+    "false && echo unreachable || echo reached" \
+    "reached" \
+    "exact"
+
+# 13. Chaining OR || failure
+run_test "OR (||) executes on failure" \
+    "false || echo fallback" \
+    "fallback" \
+    "exact"
+
+# 14. Chaining OR || success
+run_test "OR (||) skips next on success" \
+    "true || echo unreachable
+echo after" \
+    "after" \
+    "exact"
+
+suite_summary "Pipelines & Operators"
+exit $?

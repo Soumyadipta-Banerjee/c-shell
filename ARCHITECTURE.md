@@ -171,3 +171,42 @@ When adding new capabilities, adhere to the following architectural conventions:
 * **Warning Rigor**: Clean compilation under `-Wall -Wextra -pedantic -O2`.
 * **Include Conventions**: Quotes for project headers (`#include "execute.h"`), brackets for system libraries (`#include <sys/wait.h>`).
 * **Verification**: All architectural changes must pass the automated test suite (`make test`) and GitHub Actions CI.
+
+---
+
+## 6. Modular Test Architecture & Verification Harness
+
+The test subsystem follows a two-tier testing pyramid combining in-memory algorithmic C unit tests with domain-driven black-box integration suites:
+
+```text
+tests/
+├── run_tests.sh               # Master test runner & summary orchestrator
+├── helpers/
+│   └── test_framework.sh      # Reusable assertion library (assert_equals, assert_contains, assert_status)
+├── fixtures/                  # Shared test inputs and script templates (.apex, configs)
+│   ├── sample.apex            # Script execution test fixture
+│   └── profile.apex           # Startup configuration sourcing fixture
+├── integration/               # Black-box shell execution suites partitioned by domain
+│   ├── test_builtins.sh       # pwd, cd, export, unset, env, pushd, popd, dirs, z (15 tests)
+│   ├── test_pipelines.sh      # |, <, >, >>, ;, &&, || (14 tests)
+│   ├── test_substitutions.sh  # $(), ``, '', "", $?, $VAR, ${VAR}, ~ (10 tests)
+│   ├── test_jobs.sh           # &, jobs, fg, bg, kill, SIGINT, SIGTSTP (11 tests)
+│   ├── test_safety.sh         # safemode, dangerous deletion interception, aliases (7 tests)
+│   ├── test_observability.sh  # time profiler and sysinfo dashboard (5 tests)
+│   ├── test_fuzzy.sh          # Typo correction, Damerau-Levenshtein, exit 127 (5 tests)
+│   └── test_scripting.sh      # -c one-liners, .apex files, source/. (11 tests)
+└── unit/                      # Direct C unit tests for internal algorithms
+    ├── test_fuzzy.c           # Damerau-Levenshtein dynamic programming matrix edge cases (17 tests)
+    └── test_alias.c           # In-memory alias dictionary, lookup, overwrite, cleanup (8 tests)
+```
+
+### 6.1 Reusable Test Assertion Harness (`test_framework.sh`)
+* **Sandbox Isolation**: Each integration suite generates an isolated temporary directory via `mktemp -d` and binds a POSIX `trap ... EXIT` to guarantee complete cleanup of scratch files on test termination.
+* **Unified Assertions**: Encapsulates comparison primitives (`exact`, `contains`, `not_contains`, `exit_only`, `non_zero`) with ANSI colored pass/fail reporting and failure diff inspection.
+
+### 6.2 Developer Ergonomics & Feedback Loops
+* **Instant Feedback (`make test-fast`)**: Skips sleep-based process management tests to validate parser, built-in, pipeline, and syntax logic in under 1.5 seconds.
+* **Domain Targeting (`make test-suite SUITE=<name>`)**: Executes a single integration suite for focused feature debugging (e.g. `make test-suite SUITE=substitutions`).
+* **C Unit Testing (`make test-unit`)**: Compiles and verifies algorithmic core components directly in native C in under 20ms.
+* **Full Battery (`make test-all`)**: Runs all 8 integration suites and all C unit suites in sequence (103 total assertions).
+
