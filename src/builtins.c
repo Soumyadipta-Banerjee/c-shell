@@ -14,6 +14,11 @@
 #include <unistd.h>
 #include <string.h>
 #include <ctype.h>
+#include <limits.h>
+
+#ifndef PATH_MAX
+#define PATH_MAX 4096
+#endif
 
 extern char **environ;
 void lsh_record_frecency(const char *path);
@@ -284,25 +289,22 @@ static int s_frecency_count = 0;
 void lsh_record_frecency(const char *path)
 {
     if (!path || path[0] == '\0') return;
-    char resolved[1024];
-    if (realpath(path, resolved) == NULL)
-    {
-        strncpy(resolved, path, sizeof(resolved) - 1);
-        resolved[sizeof(resolved) - 1] = '\0';
-    }
+    char *resolved = realpath(path, NULL);
+    const char *target_path = resolved ? resolved : path;
 
     for (int i = 0; i < s_frecency_count; i++)
     {
-        if (strcmp(s_frecency[i].path, resolved) == 0)
+        if (strcmp(s_frecency[i].path, target_path) == 0)
         {
             s_frecency[i].score += 5;
+            if (resolved) free(resolved);
             return;
         }
     }
 
     if (s_frecency_count < MAX_FRECENCY)
     {
-        s_frecency[s_frecency_count].path = strdup(resolved);
+        s_frecency[s_frecency_count].path = strdup(target_path);
         s_frecency[s_frecency_count].score = 10;
         s_frecency_count++;
     }
@@ -317,9 +319,11 @@ void lsh_record_frecency(const char *path)
             }
         }
         free(s_frecency[min_idx].path);
-        s_frecency[min_idx].path = strdup(resolved);
+        s_frecency[min_idx].path = strdup(target_path);
         s_frecency[min_idx].score = 10;
     }
+
+    if (resolved) free(resolved);
 }
 
 int lsh_dirs(char **args)
