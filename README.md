@@ -243,10 +243,10 @@ apex-shell/
 
 5. **Run tests**:
    ```bash
-   make test       # Run all 8 integration suites (78 tests)
+   make test       # Run all 8 integration suites (86 tests)
    make test-fast  # Ultra-fast runner skipping sleep tests (< 1.5s)
-   make test-unit  # Algorithmic C unit tests (25 assertions)
-   make test-all   # Complete test suite: integration + unit (103 assertions)
+   make test-unit  # Algorithmic C unit tests (51 assertions)
+   make test-all   # Complete test suite: integration + unit (137 assertions)
    ```
 
 6. **Clean build artifacts**:
