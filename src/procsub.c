@@ -10,6 +10,9 @@
 #include <unistd.h>
 #include <sys/wait.h>
 #include <sys/types.h>
+#include <signal.h>
+#include <fcntl.h>
+#include <errno.h>
 
 typedef struct ProcSub {
     int fd;
@@ -18,6 +21,51 @@ typedef struct ProcSub {
 } ProcSub;
 
 static ProcSub *s_procsubs = NULL;
+
+typedef struct {
+    char *data;
+    size_t len;
+    size_t cap;
+} DynBuf;
+
+static int dynbuf_init(DynBuf *b, size_t initial_cap)
+{
+    b->cap = initial_cap > 0 ? initial_cap : 64;
+    b->len = 0;
+    b->data = malloc(b->cap);
+    if (!b->data) return 0;
+    b->data[0] = '\0';
+    return 1;
+}
+
+static int dynbuf_ensure(DynBuf *b, size_t needed)
+{
+    if (b->len + needed < b->cap) return 1;
+    size_t new_cap = b->cap * 2;
+    while (b->len + needed >= new_cap) new_cap *= 2;
+    char *new_data = realloc(b->data, new_cap);
+    if (!new_data) return 0;
+    b->data = new_data;
+    b->cap = new_cap;
+    return 1;
+}
+
+static int dynbuf_putc(DynBuf *b, char c)
+{
+    if (!dynbuf_ensure(b, 2)) return 0;
+    b->data[b->len++] = c;
+    b->data[b->len] = '\0';
+    return 1;
+}
+
+static int dynbuf_puts(DynBuf *b, const char *s, size_t n)
+{
+    if (!dynbuf_ensure(b, n + 1)) return 0;
+    memcpy(b->data + b->len, s, n);
+    b->len += n;
+    b->data[b->len] = '\0';
+    return 1;
+}
 
 int has_process_substitution(const char *line)
 {
@@ -72,9 +120,13 @@ void reap_process_substitutions(void)
         if (curr->fd >= 0)
         {
             close(curr->fd);
+            curr->fd = -1;
         }
         int status = 0;
-        waitpid(curr->pid, &status, 0);
+        while (waitpid(curr->pid, &status, 0) < 0)
+        {
+            if (errno != EINTR) break;
+        }
         free(curr);
         curr = next;
     }
@@ -89,10 +141,11 @@ char *resolve_process_substitutions(const char *line)
         return strdup(line);
     }
 
-    size_t cap = strlen(line) + 128;
-    size_t len = 0;
-    char *out = malloc(cap);
-    if (!out) return strdup(line);
+    DynBuf out;
+    if (!dynbuf_init(&out, strlen(line) + 128))
+    {
+        return strdup(line);
+    }
 
     int in_single_quote = 0;
     int in_double_quote = 0;
@@ -101,29 +154,36 @@ char *resolve_process_substitutions(const char *line)
     {
         if (line[i] == '\\' && line[i + 1] != '\0' && !in_single_quote)
         {
-            if (len + 2 >= cap)
+            if (!dynbuf_putc(&out, line[i++]) || !dynbuf_putc(&out, line[i++]))
             {
-                cap *= 2;
-                char *new_out = realloc(out, cap);
-                if (!new_out) { free(out); return strdup(line); }
-                out = new_out;
+                free(out.data);
+                reap_process_substitutions();
+                return strdup(line);
             }
-            out[len++] = line[i++];
-            out[len++] = line[i++];
             continue;
         }
 
         if (line[i] == '\'' && !in_double_quote)
         {
             in_single_quote = !in_single_quote;
-            out[len++] = line[i++];
+            if (!dynbuf_putc(&out, line[i++]))
+            {
+                free(out.data);
+                reap_process_substitutions();
+                return strdup(line);
+            }
             continue;
         }
 
         if (line[i] == '"' && !in_single_quote)
         {
             in_double_quote = !in_double_quote;
-            out[len++] = line[i++];
+            if (!dynbuf_putc(&out, line[i++]))
+            {
+                free(out.data);
+                reap_process_substitutions();
+                return strdup(line);
+            }
             continue;
         }
 
@@ -184,7 +244,14 @@ char *resolve_process_substitutions(const char *line)
                         pid_t pid = fork();
                         if (pid == 0)
                         {
-                            // In child subshell
+                            // In child subshell: restore default signal handling
+                            signal(SIGINT, SIG_DFL);
+                            signal(SIGQUIT, SIG_DFL);
+                            signal(SIGTSTP, SIG_DFL);
+                            signal(SIGPIPE, SIG_DFL);
+                            signal(SIGTTIN, SIG_DFL);
+                            signal(SIGTTOU, SIG_DFL);
+
                             if (is_input)
                             {
                                 close(pfd[0]);
@@ -214,7 +281,7 @@ char *resolve_process_substitutions(const char *line)
                                 lsh_free_tokens(sub_tokens);
                             }
                             free(cmd_str);
-                            free(out);
+                            free(out.data);
                             _exit(rc);
                         }
                         else if (pid > 0)
@@ -238,16 +305,13 @@ char *resolve_process_substitutions(const char *line)
                             snprintf(dev_fd_path, sizeof(dev_fd_path), "/dev/fd/%d", tracked_fd);
                             size_t path_len = strlen(dev_fd_path);
 
-                            while (len + path_len + 1 >= cap)
+                            if (!dynbuf_puts(&out, dev_fd_path, path_len))
                             {
-                                cap *= 2;
-                                char *new_out = realloc(out, cap);
-                                if (!new_out) { free(out); free(cmd_str); return strdup(line); }
-                                out = new_out;
+                                free(out.data);
+                                free(cmd_str);
+                                reap_process_substitutions();
+                                return strdup(line);
                             }
-
-                            strcpy(out + len, dev_fd_path);
-                            len += path_len;
 
                             i = end + 1; // Advance past ')'
                             free(cmd_str);
@@ -265,17 +329,14 @@ char *resolve_process_substitutions(const char *line)
             }
         }
 
-        if (len + 2 >= cap)
+        if (!dynbuf_putc(&out, line[i++]))
         {
-            cap *= 2;
-            char *new_out = realloc(out, cap);
-            if (!new_out) { free(out); return strdup(line); }
-            out = new_out;
+            free(out.data);
+            reap_process_substitutions();
+            return strdup(line);
         }
-
-        out[len++] = line[i++];
     }
 
-    out[len] = '\0';
-    return out;
+    return out.data;
 }
+

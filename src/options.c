@@ -14,6 +14,33 @@ ShellOptions g_shell_opts = {
     .nounset = 0
 };
 
+static void set_option_by_name(const char *name, int enable)
+{
+    if (strcmp(name, "errexit") == 0) g_shell_opts.errexit = enable;
+    else if (strcmp(name, "xtrace") == 0) g_shell_opts.xtrace = enable;
+    else if (strcmp(name, "nounset") == 0) g_shell_opts.nounset = enable;
+    else fprintf(stderr, "set: unknown option '%s'\n", name);
+}
+
+static int set_option_by_char(char c, int enable)
+{
+    switch (c)
+    {
+        case 'e':
+            g_shell_opts.errexit = enable;
+            return 0;
+        case 'x':
+            g_shell_opts.xtrace = enable;
+            return 0;
+        case 'u':
+            g_shell_opts.nounset = enable;
+            return 0;
+        default:
+            fprintf(stderr, "set: invalid option '%c%c'\n", enable ? '-' : '+', c);
+            return 1;
+    }
+}
+
 int lsh_set(char **args)
 {
     if (args[1] == NULL)
@@ -36,65 +63,21 @@ int lsh_set(char **args)
     for (int i = 1; args[i] != NULL; i++)
     {
         const char *arg = args[i];
-        if (arg[0] == '-')
+        if (arg[0] == '-' || arg[0] == '+')
         {
-            if (strcmp(arg, "-o") == 0 && args[i + 1] != NULL)
+            int enable = (arg[0] == '-');
+            if ((strcmp(arg, "-o") == 0 || strcmp(arg, "+o") == 0) && args[i + 1] != NULL)
             {
                 i++;
-                if (strcmp(args[i], "errexit") == 0) g_shell_opts.errexit = 1;
-                else if (strcmp(args[i], "xtrace") == 0) g_shell_opts.xtrace = 1;
-                else if (strcmp(args[i], "nounset") == 0) g_shell_opts.nounset = 1;
-                else fprintf(stderr, "set: unknown option '%s'\n", args[i]);
+                set_option_by_name(args[i], enable);
                 continue;
             }
 
             for (int j = 1; arg[j] != '\0'; j++)
             {
-                switch (arg[j])
+                if (set_option_by_char(arg[j], enable) != 0)
                 {
-                    case 'e':
-                        g_shell_opts.errexit = 1;
-                        break;
-                    case 'x':
-                        g_shell_opts.xtrace = 1;
-                        break;
-                    case 'u':
-                        g_shell_opts.nounset = 1;
-                        break;
-                    default:
-                        fprintf(stderr, "set: invalid option '-%c'\n", arg[j]);
-                        return 1;
-                }
-            }
-        }
-        else if (arg[0] == '+')
-        {
-            if (strcmp(arg, "+o") == 0 && args[i + 1] != NULL)
-            {
-                i++;
-                if (strcmp(args[i], "errexit") == 0) g_shell_opts.errexit = 0;
-                else if (strcmp(args[i], "xtrace") == 0) g_shell_opts.xtrace = 0;
-                else if (strcmp(args[i], "nounset") == 0) g_shell_opts.nounset = 0;
-                else fprintf(stderr, "set: unknown option '%s'\n", args[i]);
-                continue;
-            }
-
-            for (int j = 1; arg[j] != '\0'; j++)
-            {
-                switch (arg[j])
-                {
-                    case 'e':
-                        g_shell_opts.errexit = 0;
-                        break;
-                    case 'x':
-                        g_shell_opts.xtrace = 0;
-                        break;
-                    case 'u':
-                        g_shell_opts.nounset = 0;
-                        break;
-                    default:
-                        fprintf(stderr, "set: invalid option '+%c'\n", arg[j]);
-                        return 1;
+                    return 1;
                 }
             }
         }
@@ -102,3 +85,4 @@ int lsh_set(char **args)
 
     return 0;
 }
+

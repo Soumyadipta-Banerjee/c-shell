@@ -90,19 +90,27 @@ int has_brace_syntax(const char *str)
     return 0;
 }
 
-static void add_to_list(char ***list, int *count, int *cap, char *item)
+static int add_to_list(char ***list, int *count, int *cap, char *item)
 {
+    if (!item) return -1;
     if (*count >= *cap)
     {
-        *cap = (*cap == 0) ? 8 : (*cap * 2);
-        char **new_list = realloc(*list, (*cap) * sizeof(char *));
-        if (!new_list) return;
+        int new_cap = (*cap == 0) ? 8 : (*cap * 2);
+        char **new_list = realloc(*list, new_cap * sizeof(char *));
+        if (!new_list)
+        {
+            free(item);
+            return -1;
+        }
         *list = new_list;
+        *cap = new_cap;
     }
     (*list)[(*count)++] = item;
+    return 0;
 }
 
 void free_brace_list(char **list, int count)
+
 {
     if (!list) return;
     for (int i = 0; i < count; i++)
