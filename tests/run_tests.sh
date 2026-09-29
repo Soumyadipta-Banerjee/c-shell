@@ -154,6 +154,28 @@ else
                 FAILED_SUITES=$((FAILED_SUITES + 1))
             fi
         fi
+
+        if [ -x "$SCRIPT_DIR/unit/test_glob" ]; then
+            TOTAL_SUITES=$((TOTAL_SUITES + 1))
+            echo -e "\n${BLUE}▶ Running C Unit Suite: wildcard globbing${NC}"
+            "$SCRIPT_DIR/unit/test_glob"
+            if [ $? -eq 0 ]; then
+                PASSED_SUITES=$((PASSED_SUITES + 1))
+            else
+                FAILED_SUITES=$((FAILED_SUITES + 1))
+            fi
+        fi
+
+        if [ -x "$SCRIPT_DIR/unit/test_prompt" ]; then
+            TOTAL_SUITES=$((TOTAL_SUITES + 1))
+            echo -e "\n${BLUE}▶ Running C Unit Suite: PS1 prompt formatting${NC}"
+            "$SCRIPT_DIR/unit/test_prompt"
+            if [ $? -eq 0 ]; then
+                PASSED_SUITES=$((PASSED_SUITES + 1))
+            else
+                FAILED_SUITES=$((FAILED_SUITES + 1))
+            fi
+        fi
     fi
 fi
 

@@ -10,6 +10,17 @@ A high-performance, portfolio-grade Unix shell written in C99 exploring POSIX sy
 
 ## Key Features
 
+- **Pathname Wildcard Globbing (`*`, `?`, `[...]`)**:
+  - High-speed pattern expansion powered by POSIX `glob()`.
+  - Supports asterisks (`*`) matching zero or more characters, question marks (`?`) matching single characters, and bracket ranges (`[a-z]`, `[0-9]`).
+  - Strict quoting preservation: single quotes (`'*.c'`) preserve literal asterisks and bypass expansion.
+  - Safe fallback: non-matching patterns remain unchanged as literal strings (`GLOB_NOCHECK`).
+- **Heredoc (`<< DELIM`) & Herestring (`<<< "string"`) Redirection**:
+  - Multi-line Heredocs (`cat << EOF ... EOF`): seamlessly captures multi-line interactive and scripted stdin until the delimiter is reached, streaming into child stdin via anonymous pipes.
+  - Herestrings (`grep "pattern" <<< "$VAR"`): feeds single-line strings or expanded variables directly into a command or pipeline's standard input.
+- **Configurable `PS1` Dynamic Prompt Engine**:
+  - Parses standard escape format specifiers in `$PS1`: `\u` (user), `\h`/`\H` (short/full host), `\w`/`\W` (full/short path with `~`), `\t` (time), `\d` (date), `\g` (Git branch with dirty indicator), `\$` (`#` for root, `$` for user), `\e` (ANSI escape), `\n` (newline), and `\\`.
+  - Automatically falls back to the clean Git-aware ANSI colored prompt when `$PS1` is unset.
 - **Fish-Style Ghost Text Autosuggestions**:
   - Real-time inline history suggestions rendered dynamically in faint grey ahead of the cursor without altering the line buffer.
   - Transparent cursor alignment preserving 1:1 editing position.
@@ -243,10 +254,10 @@ apex-shell/
 
 5. **Run tests**:
    ```bash
-   make test       # Run all 8 integration suites (86 tests)
+   make test       # Run all 8 integration suites (94 tests)
    make test-fast  # Ultra-fast runner skipping sleep tests (< 1.5s)
-   make test-unit  # Algorithmic C unit tests (51 assertions)
-   make test-all   # Complete test suite: integration + unit (137 assertions)
+   make test-unit  # Algorithmic C unit tests (94 assertions across 5 suites)
+   make test-all   # Complete test suite: integration + unit (188 assertions)
    ```
 
 6. **Clean build artifacts**:
@@ -329,6 +340,25 @@ ls nonexistent 2> error.log    # Redirects stderr to file
 echo "Both streams" &> all.log # Redirects stdout & stderr
 cat input.txt > out.log 2>&1   # Merges stderr into stdout
 
+# Pathname Wildcard Globbing (*, ?, [...])
+ls src/*.c                     # Expands to all C source files
+echo tests/unit/test_*.c       # Expands to unit test source files
+echo '*.c'                     # Preserves literal string when single-quoted
+
+# Heredocs (<< DELIM) & Herestrings (<<<)
+cat << EOF
+Multi-line text block
+Preserves lines until delimiter
+EOF
+
+grep "apex" <<< "Welcome to apex shell"  # Herestring stdin streaming
+tr a-z A-Z <<< "hello world"             # Prints: HELLO WORLD
+
+# Configurable PS1 Dynamic Prompt Engine
+export PS1="[\u@\h \W]\$ "               # Standard bash-style prompt
+export PS1="\e[32m\u\e[0m:\w (\g)\$ "   # Custom colored prompt with Git branch
+unset PS1                                # Restores default Git-aware prompt
+
 # Directory Stack Navigation
 pushd /tmp             # Pushes current directory and switches to /tmp
 dirs                   # Displays: /tmp /home/soumya/apex-shell
@@ -386,14 +416,16 @@ exit 0
 Apex Shell features a modular, two-tier test architecture combining native **C unit tests** with domain-driven **black-box integration suites** managed by `tests/run_tests.sh`:
 
 ### Test Organization
-- **C Unit Tests (`tests/unit/`)**: 51 assertions testing pure algorithms directly in C:
+- **C Unit Tests (`tests/unit/`)**: 94 assertions testing pure algorithms directly in C:
   - `test_fuzzy.c`: Damerau-Levenshtein distance calculation, transpositions, substitutions, and suggestion ranking (17 assertions).
   - `test_alias.c`: In-memory alias dictionary, insertion, lookup, overwriting, unsetting, and teardown (8 assertions).
   - `test_arithmetic.c`: Recursive-descent math parser, precedence, unary/binary/relational ops, variables, division-by-zero checks (26 assertions).
-- **Integration Test Suites (`tests/integration/`)**: 86 test cases partitioned across 8 dedicated domains:
+  - `test_glob.c`: POSIX pathname wildcard pattern matching, single-quote preservation, and fallback behavior (19 assertions).
+  - `test_prompt.c`: PS1 dynamic escape specifiers (`\u`, `\h`, `\w`, `\W`, `\t`, `\d`, `\g`, `\$`, `\e`, `\n`, `\\`) and fallback rendering (24 assertions).
+- **Integration Test Suites (`tests/integration/`)**: 94 test cases partitioned across 8 dedicated domains:
   - `test_builtins.sh`: Built-in commands (`pwd`, `cd`, `export`, `unset`, `env`, `dirs`, `pushd`, `popd`, `z`, `help`, `exit`).
-  - `test_pipelines.sh`: Pipelines, standard & extended I/O redirections (`<`, `>`, `>>`, `2>`, `2>>`, `&>`, `2>&1`), chaining operators (`;`, `&&`, `||`).
-  - `test_substitutions.sh`: Subshell command substitutions (`$(cmd)` & `` `cmd` ``), arithmetic expansion (`$(( ... ))`), quoting (`''`, `""`), and variable expansions (`$VAR`, `${VAR}`, `$?`, `~`).
+  - `test_pipelines.sh`: Pipelines, standard & extended I/O redirections (`<`, `>`, `>>`, `2>`, `2>>`, `&>`, `2>&1`), herestrings (`<<<`), heredocs (`<< DELIM`), and chaining operators (`;`, `&&`, `||`) (22 tests).
+  - `test_substitutions.sh`: Subshell command substitutions (`$(cmd)` & `` `cmd` ``), arithmetic expansion (`$(( ... ))`), pathname wildcard globbing (`*`, `?`), quoting (`''`, `""`), and variable expansions (`$VAR`, `${VAR}`, `$?`, `~`) (18 tests).
   - `test_jobs.sh`: Background execution (`&`), job tracking (`jobs`), process signaling (`kill`), foreground/background control (`fg`, `bg`), and signal protection (`SIGINT`, `SIGTSTP`).
   - `test_safety.sh`: Proactive safety shield (`safemode`), dangerous deletion prevention (`rm -rf /`), and command aliases (`alias`, `unalias`).
   - `test_observability.sh`: Command execution profiler (`time`) and kernel telemetry dashboard (`sysinfo`).
@@ -402,19 +434,19 @@ Apex Shell features a modular, two-tier test architecture combining native **C u
 
 ### Test Execution Commands
 ```bash
-# Run all integration suites (86 tests)
+# Run all integration suites (94 tests)
 make test
 
 # Ultra-fast runner skipping sleep tests (< 1.5s)
 make test-fast
 
-# Compile and run native C algorithmic unit tests (51 assertions)
+# Compile and run native C algorithmic unit tests (94 assertions across 5 suites)
 make test-unit
 
 # Run specific integration suite (e.g. substitutions, builtins, jobs, safety)
 make test-suite SUITE=substitutions
 
-# Run the complete test battery (Integration + Unit = 137 assertions)
+# Run the complete test battery (Integration + Unit = 188 assertions across 13 suites)
 make test-all
 ```
 

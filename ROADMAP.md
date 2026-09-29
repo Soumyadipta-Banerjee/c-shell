@@ -27,6 +27,8 @@ This document outlines the master roadmap for evolving `c-shell` into **Apex She
 │ Phase 8    │ Command Substitution $(), Syntax Colors, Ctrl+R, pushd/z  │
 ├────────────┼───────────────────────────────────────────────────────────┤
 │ Phase 9    │ Ghost Autosuggestions, Extended Redirections, Math Engine │
+├────────────┼───────────────────────────────────────────────────────────┤
+│ Phase 10   │ Wildcard Globbing, Heredoc/Herestring, PS1 Prompt Engine  │
 └────────────┴───────────────────────────────────────────────────────────┘
 ```
 
@@ -300,6 +302,60 @@ Elevate interactive developer ergonomics with fish-style asynchronous inline gho
 - [x] Implement inline faint ghost text rendering and acceptance shortcuts (`Right Arrow`, `End`, `Ctrl+F`, `Ctrl+E`) in `src/linereader.c`.
 - [x] Update syntax highlighter to colorize extended redirections and arithmetic expressions.
 - [x] Add automated unit and integration tests across pipelines and expansions.
+
+---
+
+## Phase 10: Wildcard Globbing, Heredoc / Herestring, & PS1 Prompt Engine
+
+### Objectives
+Equip `apex-shell` with native POSIX pathname wildcard pattern expansion (`*`, `?`, `[...]`), multi-line heredocs (`<< DELIM`) and herestrings (`<<< "text"`), and a fully configurable `PS1` prompt engine supporting bash-compatible format specifiers and dynamic Git branch rendering.
+
+### Requirements & Specifications
+1. **Pathname Wildcard Globbing (`*`, `?`, `[...]`)**:
+   - High-speed POSIX `glob()` integration (`src/globber.c` & `include/globber.h`).
+   - Supports:
+     - `*`: Matches zero or more characters in path component.
+     - `?`: Matches any single character.
+     - `[...]`: Matches any character in brackets (including character ranges, e.g. `[0-9]`, `[a-z]`).
+   - Strict quoting preservation: single-quoted patterns (`'*.c'`) preserve literal asterisks and bypass glob expansion.
+   - `GLOB_NOCHECK` fallback: non-matching patterns remain unchanged as literal arguments.
+   - Dynamic argument vector reconstitution and memory cleanup (`expand_tokens_with_glob()`, `free_glob_args()`).
+2. **Heredoc (`<< DELIM`) & Herestring (`<<< "string"`) Redirection Engine**:
+   - Multi-line Heredoc (`<< DELIM`):
+     - Interactive and batch reader captures successive lines until standalone `DELIM` is encountered.
+     - Automatically normalizes captured multi-line text into a self-contained single-line stream before execution dispatch.
+     - Feeds captured contents into an anonymous pipe connected to the command's standard input descriptor (`STDIN_FILENO`).
+   - Herestring (`<<< "string"`):
+     - Pipes an inline literal or expanded string directly into the command's `stdin` via an anonymous pipe.
+     - Supports full pipeline and chaining composition (`grep "search" <<< "search line" | tr a-z A-Z`).
+3. **Configurable `PS1` Dynamic Prompt Engine**:
+   - Evaluates `$PS1` environment variable when rendering shell prompt (`format_ps1`).
+   - When `$PS1` is unset, seamlessly falls back to the default Git-aware ANSI colored prompt (`user@host:path (git:branch)$ `).
+   - Supported escape specifiers:
+     - `\u`: Current user name (`$USER` or `getpwuid(geteuid())`).
+     - `\h`: Short hostname (up to first dot `.`).
+     - `\H`: Full system hostname.
+     - `\w`: Current working directory with home directory shortened to `~`.
+     - `\W`: Basename of current working directory.
+     - `\t`: Current local time in 24-hour format (`HH:MM:SS`).
+     - `\d`: Current date in `"Day Mon Date"` format (e.g., `Tue Sep 29`).
+     - `\g`: Current Git branch name with clean/dirty indicator (empty outside a Git repo).
+     - `\$`: Root indicator (`#` if UID == 0, `$` otherwise).
+     - `\e`: ASCII escape character (`\033`) for custom ANSI color sequences.
+     - `\n`: Literal newline for multi-line prompts.
+     - `\\`: Literal backslash character.
+
+### Implementation Checklist
+- [x] Create `include/globber.h` and `src/globber.c` implementing `has_glob_meta`, `expand_path_pattern`, `expand_tokens_with_glob`, and `free_glob_args`.
+- [x] Integrate wildcard globbing into command execution dispatch in `src/execute.c`.
+- [x] Create C unit test suite `tests/unit/test_glob.c` (19 unit assertions).
+- [x] Extend lexer in `src/parser.c` to tokenize `<<<` (herestring) and `<<` (heredoc).
+- [x] Implement anonymous pipe input streaming for `<<<` in `src/redirection.c`.
+- [x] Implement heredoc capture and stream transformation (`resolve_heredocs`) in `src/redirection.c`, wired into `src/main.c`.
+- [x] Implement `format_ps1` engine in `src/prompt.c` with all format specifiers and Git branch integration.
+- [x] Create C unit test suite `tests/unit/test_prompt.c` (24 unit assertions).
+- [x] Add automated integration tests for globbing, herestrings, and heredocs in `test_pipelines.sh` and `test_substitutions.sh`.
+- [x] Update build system `Makefile` and master runner `tests/run_tests.sh`.
 
 ---
 

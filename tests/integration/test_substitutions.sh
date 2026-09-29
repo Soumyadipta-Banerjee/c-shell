@@ -99,5 +99,31 @@ echo \"Result: \$(( APEX_NUM * 6 ))\"" \
     "Result: 42" \
     "exact"
 
+# 15. Wildcard Globbing: * expands matching files
+touch "$TEST_DIR/alpha1.test" "$TEST_DIR/alpha2.test"
+run_test "wildcard globbing (*) expands matching files" \
+    "echo alpha*.test" \
+    "alpha1.test alpha2.test" \
+    "contains"
+
+# 16. Wildcard Globbing: ? matches single character
+touch "$TEST_DIR/beta1.test" "$TEST_DIR/beta2.test"
+run_test "wildcard globbing (?) matches single character" \
+    "echo beta?.test" \
+    "beta1.test beta2.test" \
+    "contains"
+
+# 17. Quoted Glob: single quotes prevent glob expansion
+run_test "single quotes prevent wildcard globbing" \
+    "echo 'alpha*.test'" \
+    "alpha*.test" \
+    "exact"
+
+# 18. Non-matching pattern preserves literal pattern
+run_test "unmatched wildcard pattern preserved literally" \
+    "echo unmatched_glob_*.xyz" \
+    "unmatched_glob_*.xyz" \
+    "exact"
+
 suite_summary "Expansions & Quoting"
 exit $?

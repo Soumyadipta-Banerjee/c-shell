@@ -10,11 +10,63 @@
 #include "safety.h"
 #include "linereader.h"
 #include "builtins.h"
+#include "redirection.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 #include <ctype.h>
+
+static char *stdin_read_line_cb(void *ctx)
+{
+    (void)ctx;
+    if (isatty(STDIN_FILENO))
+    {
+        fprintf(stderr, "> ");
+        fflush(stderr);
+    }
+    return lsh_read_line();
+}
+
+static char *file_read_line_cb(void *ctx)
+{
+    FILE *f = (FILE *)ctx;
+    char *line = NULL;
+    size_t cap = 0;
+    ssize_t n = getline(&line, &cap, f);
+    if (n == -1)
+    {
+        free(line);
+        return NULL;
+    }
+    return line;
+}
+
+static char *string_read_line_cb(void *ctx)
+{
+    const char **p = (const char **)ctx;
+    if (p && *p && **p != '\0')
+    {
+        const char *start = *p;
+        const char *eol = strchr(start, '\n');
+        if (eol)
+        {
+            size_t len = eol - start;
+            char *line = malloc(len + 1);
+            memcpy(line, start, len);
+            line[len] = '\0';
+            *p = eol + 1;
+            return line;
+        }
+        else
+        {
+            char *line = strdup(start);
+            *p = start + strlen(start);
+            return line;
+        }
+    }
+    return stdin_read_line_cb(NULL);
+}
 
 void lsh_loop(void)
 {
@@ -37,6 +89,7 @@ void lsh_loop(void)
 
         history_add(line);
         tokens = lsh_split_line(line);
+        resolve_heredocs(tokens, stdin_read_line_cb, NULL);
         lsh_execute_line(tokens);
 
         free(line);
@@ -74,6 +127,7 @@ static int run_script_file(const char *filename)
         }
 
         ShellToken **tokens = lsh_split_line(p);
+        resolve_heredocs(tokens, file_read_line_cb, f);
         lsh_execute_line(tokens);
         lsh_free_tokens(tokens);
     }
@@ -85,9 +139,18 @@ static int run_script_file(const char *filename)
 
 static int run_command_string(const char *cmd)
 {
-    ShellToken **tokens = lsh_split_line((char *)cmd);
+    const char *ptr = cmd;
+    char *first_line = string_read_line_cb(&ptr);
+    if (!first_line)
+    {
+        return 0;
+    }
+
+    ShellToken **tokens = lsh_split_line(first_line);
+    resolve_heredocs(tokens, string_read_line_cb, &ptr);
     lsh_execute_line(tokens);
     lsh_free_tokens(tokens);
+    free(first_line);
     return g_last_exit_status;
 }
 

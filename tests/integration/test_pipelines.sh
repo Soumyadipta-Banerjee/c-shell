@@ -132,5 +132,37 @@ run_test "merging stderr to stdout (2>&1) captured in pipeline" \
     "No such file" \
     "exact"
 
+# 19. Herestring: <<< injects string into stdin
+run_test "herestring (<<<) pipes string to command" \
+    "cat <<< 'hello herestring'" \
+    "hello herestring" \
+    "exact"
+
+# 20. Herestring in pipeline
+run_test "herestring in pipeline" \
+    "tr a-z A-Z <<< 'apex shell' | grep APEX" \
+    "APEX SHELL" \
+    "exact"
+
+# 21. Heredoc: << EOF captures multi-line content
+run_test "heredoc (<<) captures multi-line stream" \
+    "cat << EOF
+first line
+second line
+EOF" \
+    "first line
+second line" \
+    "contains"
+
+# 22. Heredoc inside pipeline
+run_test "heredoc with pipeline processing" \
+    "grep -E 'one|three' << EOF | wc -l
+one
+two
+three
+EOF" \
+    "2" \
+    "exact"
+
 suite_summary "Pipelines & Operators"
 exit $?

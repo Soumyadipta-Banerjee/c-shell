@@ -55,9 +55,10 @@ This document details the architectural layout, component boundaries, execution 
 | **Main / Lifecycle** | `include/parser.h`, `include/execute.h` | `src/main.c` | Program entrypoint, signals init, jobs init, REPL loop, exit teardown. |
 | **Parser & Lexer** | `include/parser.h` | `src/parser.c` | Line reading (`getchar`), quoting state machine, tokenization, operator splitting (`;`, `&&`, `||`, `&`, `|`, `<`, `>`), and token lifecycle. |
 | **Expansion Engine** | `include/expander.h` | `src/expander.c` | Runtime variable expansion (`$VAR`, `${VAR}`, `$?`, `$$`), subshell command capture (`$(cmd)`, `` `cmd` ``), arithmetic bridge, and tildes (`~`). |
-| **Prompt & Git** | `include/prompt.h` | `src/prompt.c` | Git branch discovery parsing `.git/HEAD` directly without subprocesses, dynamic ANSI prompt rendering with path shortening. |
-| **Execution Engine** | `include/execute.h` | `src/execute.c` | Chaining flow control (short-circuit logic), argument expansion, multi-stage pipeline creation, and process launching. |
-| **Redirection Engine** | `include/redirection.h` | `src/redirection.c` | Extended file descriptor redirection (`<`, `>`, `>>`, `2>`, `2>>`, `&>`, `2>&1`, `1>&2`), and argument stream compaction. |
+| **Prompt & Git** | `include/prompt.h` | `src/prompt.c` | Dynamic PS1 prompt engine (`\u`, `\h`, `\w`, `\W`, `\t`, `\d`, `\g`, `\$`, `\e`, `\n`), zero-subprocess Git branch discovery (`.git/HEAD`). |
+| **Execution Engine** | `include/execute.h` | `src/execute.c` | Chaining flow control (short-circuit logic), argument expansion, wildcard glob expansion, multi-stage pipeline creation, and process launching. |
+| **Wildcard Globbing** | `include/globber.h` | `src/globber.c` | POSIX `glob()` wildcard pathname pattern expansion (`*`, `?`, `[...]`), literal quote preservation, and argument vector reconstitution. |
+| **Redirection & Heredoc** | `include/redirection.h` | `src/redirection.c` | Extended FD redirections (`<`, `>`, `>>`, `2>`, `2>>`, `&>`, `2>&1`, `1>&2`), herestrings (`<<<`), heredoc multi-line capture (`<< DELIM`), and anonymous pipe streaming. |
 | **Built-ins** | `include/builtins.h` | `src/builtins.c` | In-process commands that modify shell state (`cd`, `exit`, `pwd`, `help`, `jobs`, `export`, `unset`, `pushd`, `popd`, `dirs`, `z`, `source`). |
 | **Job Control** | `include/jobs.h` | `src/jobs.c` | Background task tracking linked list, non-blocking asynchronous zombie reaping (`waitpid` with `WNOHANG`), and job status formatting. |
 | **Telemetry & Observability** | `include/telemetry.h` | `src/telemetry.c` | Process profiling (`getrusage`, `clock_gettime`), execution telemetry interceptor (`time`), and `/proc` system resource dashboard (`sysinfo`). |
@@ -140,19 +141,33 @@ typedef struct Alias {
 * **Fallback Guarantee**: In non-interactive contexts (pipes, redirection, scripts), `lsh_read_interactive_line()` falls back to standard `lsh_read_line()` with zero terminal escape overhead.
 * **Autocompletion**: Intercepts `\t` (Tab). Scans registered built-in commands and the current working directory via `opendir`/`readdir`. If a unique candidate is found, completes inline; if multiple candidates share a prefix, completes the longest common prefix.
 
-### 3.5 Proactive Safety Shield (`Safety Shield`)
+### 3.6 Proactive Safety Shield (`Safety Shield`)
 * **Destructive Command Interception**: Intercepts `rm` invocations containing recursive flags (`-r`, `-R`, `--recursive`).
 * **Critical Barriers**: Protects `/`, `/*`, `~`, `$HOME`, `.`, `..`, and bare `*`.
 * **Interactive vs Automated**: Prompts the user with `[y/N]` confirmation in interactive mode. Under non-interactive mode or automated scripts, execution is blocked with exit code 1 to protect the host machine.
 * **Runtime Toggle**: Configurable at runtime via `safemode on`, `safemode off`, or `safemode status`.
 
-### 3.6 Subshell Command Substitution (`$(...)` and `` `...` ``)
+### 3.7 Subshell Command Substitution (`$(...)` and `` `...` ``)
 * **Anonymous Pipe IPC**: `capture_command_output()` creates an anonymous pipe via `pipe()`, forks a subshell child, redirects child `stdout` to the pipe write end, and executes the inner command line using `lsh_split_line()` and `lsh_execute_line()`.
 * **Output Processing**: The parent process drains the read end of the pipe into a dynamically resizing heap buffer, awaits child termination (`waitpid`), strips trailing `\r`/`\n` characters per POSIX specification, and splices the resulting string into the expanding token stream.
 
-### 3.7 Directory Stack & Frecency State (`pushd`, `popd`, `dirs`, `z`)
+### 3.8 Directory Stack & Frecency State (`pushd`, `popd`, `dirs`, `z`)
 * **Directory Stack**: Static LIFO array (`s_dir_stack[64]`) storing heap-allocated directory paths. `pushd` saves current directory and changes to target; `popd` returns to previous stack entry.
 * **Frecency Matrix**: Maintains directory visits and dynamic weights in `s_frecency[128]`. Whenever directory changes succeed (`cd`, `pushd`, `popd`), scores increase. The `z` command performs ranked substring matching to execute instant jumps.
+
+### 3.9 Pathname Wildcard Globbing Engine (`globber`)
+* **POSIX `glob()` Integration**: Prior to command execution, `expand_tokens_with_glob()` inspects token arguments using `has_glob_meta()` for meta-characters `*`, `?`, and `[...]`.
+* **Strict Quoting Preservation**: Single-quoted tokens (`is_literal == 1`) bypass expansion to preserve literal wildcard symbols.
+* **Fallback & Reconstitution**: Unmatched patterns default to literal strings (`GLOB_NOCHECK`). Matching entries are sorted alphabetically by libc and reconstituted into an expanded `char **` argument vector, freed via `free_glob_args()`.
+
+### 3.10 Heredocs & Herestrings Anonymous Pipe Streaming
+* **Heredoc Capture (`<< DELIM`)**: `resolve_heredocs()` scans user input lines for `<< DELIM` tokens. In interactive or batch mode, subsequent lines are buffered until the standalone delimiter appears, transformed into an escaped herestring `<<< "content"`.
+* **Herestring Anonymous Pipe (`<<<`)**: `handle_redirection()` detects `<<<` and writes the target string payload directly into an anonymous kernel pipe (`pipe()`), connecting the read end to `STDIN_FILENO` with `dup2()`.
+
+### 3.11 Configurable Dynamic PS1 Prompt Engine
+* **Format Specifier Lexer**: `format_ps1()` dynamically inspects `$PS1`, parsing escape sequences (`\u`, `\h`, `\H`, `\w`, `\W`, `\t`, `\d`, `\g`, `\$`, `\e`, `\n`, `\\`).
+* **Git Repository Telemetry**: `\g` natively checks `.git/HEAD` and git status without spawning child processes.
+* **Fallback**: When `$PS1` is unset, the prompt seamlessly falls back to the default Git-aware ANSI colored prompt format.
 
 ---
 
@@ -209,8 +224,8 @@ tests/
 │   └── profile.apex           # Startup configuration sourcing fixture
 ├── integration/               # Black-box shell execution suites partitioned by domain
 │   ├── test_builtins.sh       # pwd, cd, export, unset, env, pushd, popd, dirs, z (15 tests)
-│   ├── test_pipelines.sh      # |, <, >, >>, 2>, 2>>, &>, 2>&1, ;, &&, || (18 tests)
-│   ├── test_substitutions.sh  # $(), ``, $(( )), '', "", $?, $VAR, ${VAR}, ~ (14 tests)
+│   ├── test_pipelines.sh      # |, <, >, >>, 2>, 2>>, &>, 2>&1, <<<, << DELIM, ;, &&, || (22 tests)
+│   ├── test_substitutions.sh  # $(), ``, $(( )), *, ?, [..], '', "", $?, $VAR, ${VAR}, ~ (18 tests)
 │   ├── test_jobs.sh           # &, jobs, fg, bg, kill, SIGINT, SIGTSTP (11 tests)
 │   ├── test_safety.sh         # safemode, dangerous deletion interception, aliases (7 tests)
 │   ├── test_observability.sh  # time profiler and sysinfo dashboard (5 tests)
@@ -219,7 +234,9 @@ tests/
 └── unit/                      # Direct C unit tests for internal algorithms
     ├── test_fuzzy.c           # Damerau-Levenshtein dynamic programming matrix edge cases (17 tests)
     ├── test_alias.c           # In-memory alias dictionary, lookup, overwrite, cleanup (8 tests)
-    └── test_arithmetic.c      # Arithmetic engine, precedence, variables, error states (26 tests)
+    ├── test_arithmetic.c      # Arithmetic engine, precedence, variables, error states (26 tests)
+    ├── test_glob.c            # Wildcard globbing, meta detection, quotes, fallback (19 tests)
+    └── test_prompt.c          # PS1 format specifiers, user, host, git branch, cwd, colors (24 tests)
 ```
 
 ### 6.1 Reusable Test Assertion Harness (`test_framework.sh`)
@@ -229,6 +246,6 @@ tests/
 ### 6.2 Developer Ergonomics & Feedback Loops
 * **Instant Feedback (`make test-fast`)**: Skips sleep-based process management tests to validate parser, built-in, pipeline, and syntax logic in under 1.5 seconds.
 * **Domain Targeting (`make test-suite SUITE=<name>`)**: Executes a single integration suite for focused feature debugging (e.g. `make test-suite SUITE=substitutions`).
-* **C Unit Testing (`make test-unit`)**: Compiles and verifies algorithmic core components directly in native C in under 20ms.
-* **Full Battery (`make test-all`)**: Runs all 8 integration suites and all 3 C unit suites in sequence (137 total assertions).
+* **C Unit Testing (`make test-unit`)**: Compiles and verifies algorithmic core components directly in native C in under 30ms (94 unit assertions).
+* **Full Battery (`make test-all`)**: Runs all 8 integration suites (94 tests) and all 5 C unit suites (94 assertions) in sequence (188 total assertions).
 

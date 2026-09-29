@@ -87,6 +87,20 @@ ShellToken **lsh_split_line(char *line)
             tok->is_literal = 0;
             p += 2;
         }
+        else if (*p == '<' && *(p + 1) == '<' && *(p + 2) == '<')
+        {
+            tok->text = malloc(4);
+            memcpy(tok->text, "<<<", 4);
+            tok->is_literal = 0;
+            p += 3;
+        }
+        else if (*p == '<' && *(p + 1) == '<')
+        {
+            tok->text = malloc(3);
+            memcpy(tok->text, "<<", 3);
+            tok->is_literal = 0;
+            p += 2;
+        }
         else if (*p == ';' || *p == '|' || *p == '<' || *p == '>' || *p == '&')
         {
             tok->text = malloc(2);

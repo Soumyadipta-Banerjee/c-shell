@@ -35,6 +35,96 @@ void handle_redirection(char **args)
             close(in_fd);
             i += 2;
         }
+        else if (strcmp(args[i], "<<<") == 0)
+        {
+            if (args[i + 1] == NULL)
+            {
+                fprintf(stderr, "lsh: syntax error near unexpected token 'newline'\n");
+                exit(EXIT_FAILURE);
+            }
+            int pfd[2];
+            if (pipe(pfd) < 0)
+            {
+                perror("lsh: pipe");
+                exit(EXIT_FAILURE);
+            }
+            size_t slen = strlen(args[i + 1]);
+            ssize_t w1 = write(pfd[1], args[i + 1], slen);
+            ssize_t w2 = write(pfd[1], "\n", 1);
+            (void)w1;
+            (void)w2;
+            close(pfd[1]);
+            if (dup2(pfd[0], STDIN_FILENO) < 0)
+            {
+                perror("lsh: dup2 <<<");
+                exit(EXIT_FAILURE);
+            }
+            close(pfd[0]);
+            i += 2;
+        }
+        else if (strcmp(args[i], "<<") == 0)
+        {
+            if (args[i + 1] == NULL)
+            {
+                fprintf(stderr, "lsh: syntax error near unexpected token 'newline'\n");
+                exit(EXIT_FAILURE);
+            }
+            const char *delim = args[i + 1];
+            int pfd[2];
+            if (pipe(pfd) < 0)
+            {
+                perror("lsh: pipe");
+                exit(EXIT_FAILURE);
+            }
+
+            int in_dup = dup(STDIN_FILENO);
+            FILE *stream = (in_dup >= 0) ? fdopen(in_dup, "r") : NULL;
+            if (stream)
+            {
+                char *line = NULL;
+                size_t cap = 0;
+                ssize_t nread;
+                int is_tty = isatty(STDERR_FILENO);
+
+                if (is_tty)
+                {
+                    fprintf(stderr, "> ");
+                    fflush(stderr);
+                }
+
+                while ((nread = getline(&line, &cap, stream)) != -1)
+                {
+                    while (nread > 0 && (line[nread - 1] == '\n' || line[nread - 1] == '\r'))
+                    {
+                        line[--nread] = '\0';
+                    }
+                    if (strcmp(line, delim) == 0)
+                    {
+                        break;
+                    }
+                    ssize_t w1 = write(pfd[1], line, nread);
+                    ssize_t w2 = write(pfd[1], "\n", 1);
+                    (void)w1;
+                    (void)w2;
+                    if (is_tty)
+                    {
+                        fprintf(stderr, "> ");
+                        fflush(stderr);
+                    }
+                }
+                free(line);
+                fclose(stream);
+            }
+
+            close(pfd[1]);
+            if (dup2(pfd[0], STDIN_FILENO) < 0)
+            {
+                perror("lsh: dup2 <<");
+                exit(EXIT_FAILURE);
+            }
+            close(pfd[0]);
+            i += 2;
+        }
         else if (strcmp(args[i], ">") == 0)
         {
             if (args[i + 1] == NULL)
@@ -164,4 +254,67 @@ void handle_redirection(char **args)
         }
     }
     args[j] = NULL;
+}
+
+int resolve_heredocs(ShellToken **tokens, char *(*read_line_cb)(void *ctx), void *ctx)
+{
+    if (!tokens || !read_line_cb) return 0;
+
+    for (int i = 0; tokens[i] != NULL; i++)
+    {
+        if (strcmp(tokens[i]->text, "<<") == 0 && tokens[i + 1] != NULL)
+        {
+            char *delim = tokens[i + 1]->text;
+            size_t cap = 512, len = 0;
+            char *body = malloc(cap);
+            if (!body) return -1;
+            body[0] = '\0';
+
+            char *line = NULL;
+            while ((line = read_line_cb(ctx)) != NULL)
+            {
+                size_t llen = strlen(line);
+                while (llen > 0 && (line[llen - 1] == '\r' || line[llen - 1] == '\n'))
+                {
+                    line[--llen] = '\0';
+                }
+
+                if (strcmp(line, delim) == 0)
+                {
+                    free(line);
+                    break;
+                }
+
+                while (len + llen + 2 > cap)
+                {
+                    cap *= 2;
+                    char *new_body = realloc(body, cap);
+                    if (!new_body)
+                    {
+                        free(line);
+                        free(body);
+                        return -1;
+                    }
+                    body = new_body;
+                }
+
+                if (len > 0)
+                {
+                    body[len++] = '\n';
+                }
+                memcpy(body + len, line, llen);
+                len += llen;
+                body[len] = '\0';
+                free(line);
+            }
+
+            free(tokens[i]->text);
+            tokens[i]->text = strdup("<<<");
+
+            free(tokens[i + 1]->text);
+            tokens[i + 1]->text = body;
+            tokens[i + 1]->is_literal = 1;
+        }
+    }
+    return 0;
 }

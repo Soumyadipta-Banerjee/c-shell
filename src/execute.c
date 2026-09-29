@@ -11,6 +11,7 @@
 #include "fuzzy.h"
 #include "safety.h"
 #include "alias.h"
+#include "globber.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -541,26 +542,17 @@ int lsh_execute_line(ShellToken **tokens)
 
             if (execute_this_cmd)
             {
-                char **args = malloc((cmd_len + 1) * sizeof(char *));
+                int arg_count = 0;
+                char **args = expand_tokens_with_glob(tokens, cmd_start, cmd_len, &arg_count);
                 if (!args)
                 {
                     fprintf(stderr, "lsh: allocation error\n");
                     return 1;
                 }
 
-                for (int j = 0; j < cmd_len; j++)
-                {
-                    args[j] = expand_token(tokens[cmd_start + j]);
-                }
-                args[cmd_len] = NULL;
-
                 g_last_exit_status = lsh_execute(args, is_bg);
 
-                for (int j = 0; j < cmd_len; j++)
-                {
-                    free(args[j]);
-                }
-                free(args);
+                free_glob_args(args, arg_count);
             }
         }
 
