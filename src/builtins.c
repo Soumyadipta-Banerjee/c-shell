@@ -80,9 +80,31 @@ int lsh_num_builtins(void)
     return sizeof(builtin_str) / sizeof(char *);
 }
 
+static void update_pwd_env(const char *old_pwd)
+{
+    if (old_pwd && old_pwd[0] != '\0')
+    {
+        setenv("OLDPWD", old_pwd, 1);
+    }
+    char new_pwd[PATH_MAX];
+    if (getcwd(new_pwd, sizeof(new_pwd)) != NULL)
+    {
+        setenv("PWD", new_pwd, 1);
+        lsh_record_frecency(new_pwd);
+    }
+}
+
 int lsh_cd(char **args)
 {
+    char old_pwd[PATH_MAX];
+    if (getcwd(old_pwd, sizeof(old_pwd)) == NULL)
+    {
+        old_pwd[0] = '\0';
+    }
+
     const char *target = args[1];
+    int print_path = 0;
+
     if (target == NULL || strcmp(target, "~") == 0)
     {
         target = getenv("HOME");
@@ -92,12 +114,34 @@ int lsh_cd(char **args)
             return 1;
         }
     }
+    else if (strcmp(target, "-") == 0)
+    {
+        target = getenv("OLDPWD");
+        if (target == NULL)
+        {
+            fprintf(stderr, "lsh: cd: OLDPWD not set\n");
+            return 1;
+        }
+        print_path = 1;
+    }
+
     if (chdir(target) != 0)
     {
         perror("lsh: cd");
         return 1;
     }
-    lsh_record_frecency(target);
+
+    update_pwd_env(old_pwd);
+
+    if (print_path)
+    {
+        char cur_pwd[PATH_MAX];
+        if (getcwd(cur_pwd, sizeof(cur_pwd)) != NULL)
+        {
+            printf("%s\n", cur_pwd);
+            fflush(stdout);
+        }
+    }
     return 0;
 }
 
@@ -393,8 +437,12 @@ int lsh_pushd(char **args)
         return 1;
     }
 
-    s_dir_stack[s_dir_stack_count++] = strdup(cwd);
-    lsh_record_frecency(resolved);
+    char *saved = strdup(cwd);
+    if (saved)
+    {
+        s_dir_stack[s_dir_stack_count++] = saved;
+    }
+    update_pwd_env(cwd);
     return lsh_dirs(NULL);
 }
 
@@ -407,6 +455,12 @@ int lsh_popd(char **args)
         return 1;
     }
 
+    char old_pwd[PATH_MAX];
+    if (getcwd(old_pwd, sizeof(old_pwd)) == NULL)
+    {
+        old_pwd[0] = '\0';
+    }
+
     char *target = s_dir_stack[--s_dir_stack_count];
     if (chdir(target) != 0)
     {
@@ -415,7 +469,7 @@ int lsh_popd(char **args)
         return 1;
     }
 
-    lsh_record_frecency(target);
+    update_pwd_env(old_pwd);
     free(target);
     return lsh_dirs(NULL);
 }
@@ -454,6 +508,12 @@ int lsh_z(char **args)
         return 1;
     }
 
+    char old_pwd[PATH_MAX];
+    if (getcwd(old_pwd, sizeof(old_pwd)) == NULL)
+    {
+        old_pwd[0] = '\0';
+    }
+
     if (chdir(s_frecency[best_idx].path) != 0)
     {
         perror("apex-shell: z");
@@ -461,8 +521,26 @@ int lsh_z(char **args)
     }
 
     s_frecency[best_idx].score += 5;
+    update_pwd_env(old_pwd);
     printf("%s\n", s_frecency[best_idx].path);
     fflush(stdout);
     return 0;
+}
+
+void builtins_cleanup(void)
+{
+    for (int i = 0; i < s_dir_stack_count; i++)
+    {
+        free(s_dir_stack[i]);
+        s_dir_stack[i] = NULL;
+    }
+    s_dir_stack_count = 0;
+
+    for (int i = 0; i < s_frecency_count; i++)
+    {
+        free(s_frecency[i].path);
+        s_frecency[i].path = NULL;
+    }
+    s_frecency_count = 0;
 }
 

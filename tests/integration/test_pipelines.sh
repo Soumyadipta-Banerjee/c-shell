@@ -164,5 +164,29 @@ EOF" \
     "2" \
     "exact"
 
+# 23. Pipeline without pipefail defaults to rightmost command status
+run_test "pipeline default status reflects last stage" \
+    "false | true
+echo status:\$?" \
+    "status:0" \
+    "exact"
+
+# 24. Pipeline with set -o pipefail preserves upstream failure
+run_test "pipeline with set -o pipefail preserves upstream failure" \
+    "set -o pipefail
+false | true
+echo status:\$?" \
+    "status:1" \
+    "exact"
+
+# 25. Pipeline with set +o pipefail restores default behavior
+run_test "pipeline with set +o pipefail disables pipefail" \
+    "set -o pipefail
+set +o pipefail
+false | true
+echo status:\$?" \
+    "status:0" \
+    "exact"
+
 suite_summary "Pipelines & Operators"
 exit $?

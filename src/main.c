@@ -208,5 +208,6 @@ int main(int argc, char **argv)
 
     alias_cleanup();
     jobs_cleanup();
+    builtins_cleanup();
     return g_last_exit_status;
 }

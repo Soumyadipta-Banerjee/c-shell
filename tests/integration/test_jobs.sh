@@ -104,7 +104,14 @@ kill -9 %1" \
     "[1] " \
     "contains"
 
-# 9. kill invalid job ID
+# 9. kill with -s signal flag
+run_test "kill with -s signal flag" \
+    "sleep 30 &
+kill -s KILL %1" \
+    "[1] " \
+    "contains"
+
+# 10. kill invalid job ID
 run_test "kill invalid job ID reports error" \
     "kill %99" \
     "no such job" \

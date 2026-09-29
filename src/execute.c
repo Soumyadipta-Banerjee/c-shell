@@ -330,20 +330,30 @@ int lsh_execute_pipeline(char ***cmd_args, int num_cmds, int is_bg)
 
     int any_signaled = 0;
     int last_status = 0;
+    int rightmost_fail_status = 0;
+
     for (int i = 0; i < num_cmds; i++)
     {
         int status;
         waitpid(pids[i], &status, 0);
+        int cmd_exit = 0;
+        if (WIFEXITED(status))
+        {
+            cmd_exit = WEXITSTATUS(status);
+        }
+        else if (WIFSIGNALED(status))
+        {
+            cmd_exit = 128 + WTERMSIG(status);
+        }
+
+        if (cmd_exit != 0)
+        {
+            rightmost_fail_status = cmd_exit;
+        }
+
         if (i == num_cmds - 1)
         {
-            if (WIFEXITED(status))
-            {
-                last_status = WEXITSTATUS(status);
-            }
-            else if (WIFSIGNALED(status))
-            {
-                last_status = 128 + WTERMSIG(status);
-            }
+            last_status = cmd_exit;
         }
         if (WIFSIGNALED(status) && WTERMSIG(status) == SIGINT)
         {
@@ -362,10 +372,12 @@ int lsh_execute_pipeline(char ***cmd_args, int num_cmds, int is_bg)
         (void)w;
     }
 
+    int ret_status = (g_shell_opts.pipefail && rightmost_fail_status != 0) ? rightmost_fail_status : last_status;
+
     free(pids);
     sigaction(SIGINT, &sa_orig_int, NULL);
     sigaction(SIGTSTP, &sa_orig_tstp, NULL);
-    return last_status;
+    return ret_status;
 }
 
 static int s_alias_depth = 0;

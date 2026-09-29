@@ -11,7 +11,8 @@ extern char **environ;
 ShellOptions g_shell_opts = {
     .errexit = 0,
     .xtrace = 0,
-    .nounset = 0
+    .nounset = 0,
+    .pipefail = 0
 };
 
 static void set_option_by_name(const char *name, int enable)
@@ -19,6 +20,7 @@ static void set_option_by_name(const char *name, int enable)
     if (strcmp(name, "errexit") == 0) g_shell_opts.errexit = enable;
     else if (strcmp(name, "xtrace") == 0) g_shell_opts.xtrace = enable;
     else if (strcmp(name, "nounset") == 0) g_shell_opts.nounset = enable;
+    else if (strcmp(name, "pipefail") == 0) g_shell_opts.pipefail = enable;
     else fprintf(stderr, "set: unknown option '%s'\n", name);
 }
 
@@ -46,9 +48,10 @@ int lsh_set(char **args)
     if (args[1] == NULL)
     {
         printf("Current Shell Options:\n");
-        printf("  errexit (-e) : %s\n", g_shell_opts.errexit ? "on" : "off");
-        printf("  xtrace  (-x) : %s\n", g_shell_opts.xtrace ? "on" : "off");
-        printf("  nounset (-u) : %s\n", g_shell_opts.nounset ? "on" : "off");
+        printf("  errexit  (-e) : %s\n", g_shell_opts.errexit ? "on" : "off");
+        printf("  xtrace   (-x) : %s\n", g_shell_opts.xtrace ? "on" : "off");
+        printf("  nounset  (-u) : %s\n", g_shell_opts.nounset ? "on" : "off");
+        printf("  pipefail      : %s\n", g_shell_opts.pipefail ? "on" : "off");
         printf("\nEnvironment Variables:\n");
         if (environ)
         {
@@ -66,10 +69,18 @@ int lsh_set(char **args)
         if (arg[0] == '-' || arg[0] == '+')
         {
             int enable = (arg[0] == '-');
-            if ((strcmp(arg, "-o") == 0 || strcmp(arg, "+o") == 0) && args[i + 1] != NULL)
+            if (strcmp(arg, "-o") == 0 || strcmp(arg, "+o") == 0)
             {
-                i++;
-                set_option_by_name(args[i], enable);
+                if (args[i + 1] != NULL)
+                {
+                    i++;
+                    set_option_by_name(args[i], enable);
+                }
+                else
+                {
+                    fprintf(stderr, "set: %s requires an argument\n", arg);
+                    return 1;
+                }
                 continue;
             }
 

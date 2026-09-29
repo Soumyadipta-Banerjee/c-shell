@@ -2,9 +2,10 @@
 #define OPTIONS_H
 
 typedef struct {
-    int errexit; // -e / +e: exit on non-zero command status
-    int xtrace;  // -x / +x: trace execution to stderr
-    int nounset; // -u / +u: error on unset variable expansion
+    int errexit;  // -e / +e: exit on non-zero command status
+    int xtrace;   // -x / +x: trace execution to stderr
+    int nounset;  // -u / +u: error on unset variable expansion
+    int pipefail; // set -o pipefail: pipeline return status is rightmost failing command
 } ShellOptions;
 
 extern ShellOptions g_shell_opts;

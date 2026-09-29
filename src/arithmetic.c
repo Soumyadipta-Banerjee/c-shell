@@ -188,47 +188,161 @@ static long long parse_add_sub(MathParser *p)
     return left;
 }
 
-static long long parse_comparison(MathParser *p)
+static long long parse_shift(MathParser *p)
 {
     long long left = parse_add_sub(p);
+    while (!p->has_error)
+    {
+        skip_ws(p);
+        if (p->src[p->pos] == '<' && p->src[p->pos + 1] == '<')
+        {
+            p->pos += 2;
+            long long right = parse_add_sub(p);
+            if (right < 0 || right >= 64)
+            {
+                left = 0;
+            }
+            else
+            {
+                left = (long long)((unsigned long long)left << right);
+            }
+        }
+        else if (p->src[p->pos] == '>' && p->src[p->pos + 1] == '>')
+        {
+            p->pos += 2;
+            long long right = parse_add_sub(p);
+            if (right < 0 || right >= 64)
+            {
+                left = 0;
+            }
+            else
+            {
+                left = left >> right;
+            }
+        }
+        else
+        {
+            break;
+        }
+    }
+    return left;
+}
+
+static long long parse_relational(MathParser *p)
+{
+    long long left = parse_shift(p);
     while (!p->has_error)
     {
         skip_ws(p);
         if (p->src[p->pos] == '<' && p->src[p->pos + 1] == '=')
         {
             p->pos += 2;
-            long long right = parse_add_sub(p);
+            long long right = parse_shift(p);
             left = (left <= right);
         }
         else if (p->src[p->pos] == '>' && p->src[p->pos + 1] == '=')
         {
             p->pos += 2;
-            long long right = parse_add_sub(p);
+            long long right = parse_shift(p);
             left = (left >= right);
         }
-        else if (p->src[p->pos] == '<')
+        else if (p->src[p->pos] == '<' && p->src[p->pos + 1] != '<')
         {
             p->pos += 1;
-            long long right = parse_add_sub(p);
+            long long right = parse_shift(p);
             left = (left < right);
         }
-        else if (p->src[p->pos] == '>')
+        else if (p->src[p->pos] == '>' && p->src[p->pos + 1] != '>')
         {
             p->pos += 1;
-            long long right = parse_add_sub(p);
+            long long right = parse_shift(p);
             left = (left > right);
         }
-        else if (p->src[p->pos] == '=' && p->src[p->pos + 1] == '=')
+        else
+        {
+            break;
+        }
+    }
+    return left;
+}
+
+static long long parse_equality(MathParser *p)
+{
+    long long left = parse_relational(p);
+    while (!p->has_error)
+    {
+        skip_ws(p);
+        if (p->src[p->pos] == '=' && p->src[p->pos + 1] == '=')
         {
             p->pos += 2;
-            long long right = parse_add_sub(p);
+            long long right = parse_relational(p);
             left = (left == right);
         }
         else if (p->src[p->pos] == '!' && p->src[p->pos + 1] == '=')
         {
             p->pos += 2;
-            long long right = parse_add_sub(p);
+            long long right = parse_relational(p);
             left = (left != right);
+        }
+        else
+        {
+            break;
+        }
+    }
+    return left;
+}
+
+static long long parse_bitwise_and(MathParser *p)
+{
+    long long left = parse_equality(p);
+    while (!p->has_error)
+    {
+        skip_ws(p);
+        if (p->src[p->pos] == '&' && p->src[p->pos + 1] != '&')
+        {
+            p->pos++;
+            long long right = parse_equality(p);
+            left = left & right;
+        }
+        else
+        {
+            break;
+        }
+    }
+    return left;
+}
+
+static long long parse_bitwise_xor(MathParser *p)
+{
+    long long left = parse_bitwise_and(p);
+    while (!p->has_error)
+    {
+        skip_ws(p);
+        if (p->src[p->pos] == '^')
+        {
+            p->pos++;
+            long long right = parse_bitwise_and(p);
+            left = left ^ right;
+        }
+        else
+        {
+            break;
+        }
+    }
+    return left;
+}
+
+static long long parse_bitwise_or(MathParser *p)
+{
+    long long left = parse_bitwise_xor(p);
+    while (!p->has_error)
+    {
+        skip_ws(p);
+        if (p->src[p->pos] == '|' && p->src[p->pos + 1] != '|')
+        {
+            p->pos++;
+            long long right = parse_bitwise_xor(p);
+            left = left | right;
         }
         else
         {
@@ -240,14 +354,14 @@ static long long parse_comparison(MathParser *p)
 
 static long long parse_logical_and(MathParser *p)
 {
-    long long left = parse_comparison(p);
+    long long left = parse_bitwise_or(p);
     while (!p->has_error)
     {
         skip_ws(p);
         if (p->src[p->pos] == '&' && p->src[p->pos + 1] == '&')
         {
             p->pos += 2;
-            long long right = parse_comparison(p);
+            long long right = parse_bitwise_or(p);
             left = (left && right);
         }
         else
@@ -278,9 +392,33 @@ static long long parse_logical_or(MathParser *p)
     return left;
 }
 
+static long long parse_ternary(MathParser *p)
+{
+    long long cond = parse_logical_or(p);
+    skip_ws(p);
+    if (p->src[p->pos] == '?')
+    {
+        p->pos++; // consume '?'
+        long long true_val = parse_expr(p);
+        skip_ws(p);
+        if (p->src[p->pos] == ':')
+        {
+            p->pos++; // consume ':'
+            long long false_val = parse_ternary(p);
+            return cond ? true_val : false_val;
+        }
+        else
+        {
+            p->has_error = 1;
+            return 0;
+        }
+    }
+    return cond;
+}
+
 static long long parse_expr(MathParser *p)
 {
-    return parse_logical_or(p);
+    return parse_ternary(p);
 }
 
 long long evaluate_arithmetic_expression(const char *expr, int *error)

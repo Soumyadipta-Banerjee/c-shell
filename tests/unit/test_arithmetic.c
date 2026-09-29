@@ -79,10 +79,27 @@ int main(void) {
     assert_math("APEX_MATH_A + APEX_MATH_B", 20);
     assert_math("$APEX_MATH_A / $APEX_MATH_B", 3);
 
+    // Bitwise operators
+    assert_math("1 << 4", 16);
+    assert_math("32 >> 2", 8);
+    assert_math("14 & 7", 6);
+    assert_math("12 ^ 10", 6);
+    assert_math("8 | 3", 11);
+    assert_math("~0 == -1", 1);
+    assert_math("1 + 2 << 2", 12);
+    assert_math("(1 << 3) == 8", 1);
+
+    // Ternary operator
+    assert_math("5 > 3 ? 100 : 200", 100);
+    assert_math("2 > 5 ? 100 : 200", 200);
+    assert_math("1 ? 2 ? 42 : 99 : 0", 42);
+    assert_math("0 ? 42 : 1 ? 84 : 99", 84);
+
     // Errors: division / modulo by zero and syntax errors
     assert_math_error("10 / 0");
     assert_math_error("10 % 0");
     assert_math_error("(3 + 4");
+    assert_math_error("5 ? 10");
 
     if (g_passed == g_tests) {
         printf("  %s✓ All %d arithmetic unit tests passed.%s\n", GREEN, g_tests, NC);

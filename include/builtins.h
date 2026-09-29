@@ -26,6 +26,7 @@ int lsh_z(char **args);
 int lsh_set(char **args);
 
 int lsh_num_builtins(void);
+void builtins_cleanup(void);
 
 extern char *builtin_str[];
 extern int (*builtin_func[])(char **);

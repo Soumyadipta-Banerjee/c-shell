@@ -38,7 +38,23 @@ pwd" \
     "$HOME" \
     "exact"
 
-# 5. cd to invalid path
+# 5. cd - switches to OLDPWD and prints path
+run_test "cd - switches to previous directory and prints path" \
+    "cd subdir
+cd -
+pwd" \
+    "$TEST_DIR" \
+    "contains"
+
+# 6. cd updates PWD and OLDPWD
+run_test "cd updates PWD and OLDPWD environment variables" \
+    "cd subdir
+echo PWD:\$PWD
+echo OLDPWD:\$OLDPWD" \
+    "PWD:$TEST_DIR/subdir" \
+    "contains"
+
+# 7. cd to invalid path
 run_test "cd to invalid directory reports error" \
     "cd /nonexistent_path_12345" \
     "No such file or directory" \

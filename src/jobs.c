@@ -30,7 +30,12 @@ static Job *create_job_node(pid_t pid, const char *cmd_name, JobStatus status)
     }
     j->id = next_job_id++;
     j->pid = pid;
-    j->cmd_name = strdup(cmd_name);
+    j->cmd_name = strdup(cmd_name ? cmd_name : "");
+    if (!j->cmd_name)
+    {
+        free(j);
+        return NULL;
+    }
     j->status = status;
     j->next = NULL;
     return j;
@@ -395,6 +400,39 @@ int lsh_bg(char **args)
     return 0;
 }
 
+static int parse_signal_spec(const char *spec)
+{
+    if (!spec || spec[0] == '\0')
+    {
+        return -1;
+    }
+    if (strncasecmp(spec, "SIG", 3) == 0)
+    {
+        spec += 3;
+    }
+
+    if (strcmp(spec, "9") == 0 || strcasecmp(spec, "KILL") == 0) return SIGKILL;
+    if (strcmp(spec, "15") == 0 || strcasecmp(spec, "TERM") == 0) return SIGTERM;
+    if (strcmp(spec, "2") == 0 || strcasecmp(spec, "INT") == 0) return SIGINT;
+    if (strcmp(spec, "1") == 0 || strcasecmp(spec, "HUP") == 0) return SIGHUP;
+    if (strcmp(spec, "3") == 0 || strcasecmp(spec, "QUIT") == 0) return SIGQUIT;
+    if (strcasecmp(spec, "STOP") == 0) return SIGSTOP;
+    if (strcasecmp(spec, "CONT") == 0) return SIGCONT;
+    if (strcasecmp(spec, "TSTP") == 0) return SIGTSTP;
+    if (strcasecmp(spec, "USR1") == 0) return SIGUSR1;
+    if (strcasecmp(spec, "USR2") == 0) return SIGUSR2;
+    if (strcasecmp(spec, "PIPE") == 0) return SIGPIPE;
+    if (strcasecmp(spec, "CHLD") == 0) return SIGCHLD;
+
+    char *endptr = NULL;
+    long val = strtol(spec, &endptr, 10);
+    if (endptr && *endptr == '\0' && val > 0 && val < 64)
+    {
+        return (int)val;
+    }
+    return -1;
+}
+
 int lsh_kill(char **args)
 {
     if (args[1] == NULL)
@@ -408,35 +446,29 @@ int lsh_kill(char **args)
 
     if (args[idx][0] == '-')
     {
-        const char *signame = args[idx] + 1;
-        if (strcmp(signame, "9") == 0 || strcasecmp(signame, "KILL") == 0)
+        const char *signame = NULL;
+        const char *flag_str = args[idx];
+        if (strcmp(args[idx], "-s") == 0)
         {
-            sig = SIGKILL;
-        }
-        else if (strcmp(signame, "15") == 0 || strcasecmp(signame, "TERM") == 0)
-        {
-            sig = SIGTERM;
-        }
-        else if (strcmp(signame, "STOP") == 0)
-        {
-            sig = SIGSTOP;
-        }
-        else if (strcmp(signame, "CONT") == 0)
-        {
-            sig = SIGCONT;
-        }
-        else if (strcmp(signame, "INT") == 0 || strcmp(signame, "2") == 0)
-        {
-            sig = SIGINT;
+            idx++;
+            if (args[idx] == NULL)
+            {
+                fprintf(stderr, "apex-shell: kill: option requires an argument: -s\n");
+                return 1;
+            }
+            signame = args[idx];
+            flag_str = args[idx];
         }
         else
         {
-            sig = atoi(signame);
-            if (sig <= 0)
-            {
-                fprintf(stderr, "apex-shell: kill: invalid signal specification: %s\n", args[idx]);
-                return 1;
-            }
+            signame = args[idx] + 1;
+        }
+
+        sig = parse_signal_spec(signame);
+        if (sig <= 0)
+        {
+            fprintf(stderr, "apex-shell: kill: invalid signal specification: %s\n", flag_str);
+            return 1;
         }
         idx++;
     }
