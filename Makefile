@@ -1,7 +1,7 @@
 CC = gcc
 CFLAGS = -Wall -Wextra -pedantic -std=c99 -O2 -Iinclude
 TARGET = apex-shell
-SRCS = src/main.c src/builtins.c src/execute.c src/parser.c src/signals.c src/jobs.c src/telemetry.c src/fuzzy.c src/history.c src/alias.c src/safety.c src/linereader.c src/arithmetic.c
+SRCS = src/main.c src/builtins.c src/execute.c src/parser.c src/expander.c src/prompt.c src/redirection.c src/signals.c src/jobs.c src/telemetry.c src/fuzzy.c src/history.c src/alias.c src/safety.c src/linereader.c src/highlight.c src/completion.c src/arithmetic.c
 OBJS = $(SRCS:.c=.o)
 
 UNIT_TESTS = tests/unit/test_fuzzy tests/unit/test_alias tests/unit/test_arithmetic

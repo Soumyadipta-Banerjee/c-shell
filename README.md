@@ -137,26 +137,36 @@ apex-shell/
 │   ├── alias.h        # Command alias table and expansion declarations
 │   ├── arithmetic.h   # Recursive-descent integer arithmetic evaluator ($(( ... )))
 │   ├── builtins.h     # Built-in declarations and dispatch table
+│   ├── completion.h   # Tab autocompletion for built-ins and directory paths
 │   ├── execute.h      # Process execution, pipelines, and command chaining
+│   ├── expander.h     # Macro, variable ($VAR), command $(), and arithmetic bridge
 │   ├── fuzzy.h        # Damerau-Levenshtein distance & command suggestions
+│   ├── highlight.h    # Real-time ANSI syntax token coloring
 │   ├── history.h      # Command history and persistent serialization
 │   ├── jobs.h         # Background job tracking and non-blocking reaping
-│   ├── linereader.h   # Raw termios line editing, ghost text, tab completion
-│   ├── parser.h       # Tokenization, quoting, prompt, and expansions
+│   ├── linereader.h   # Raw termios line editing, ghost text, keystroke dispatch
+│   ├── parser.h       # Lexer, quoting state machine, and token lifecycle
+│   ├── prompt.h       # Git branch detection and dynamic prompt rendering
+│   ├── redirection.h  # Extended FD redirections (<, >, 2>, 2>>, &>, 2>&1)
 │   ├── safety.h       # Proactive safety shield against destructive commands
 │   ├── signals.h      # Signal handlers (SIGINT, SIGTSTP)
 │   └── telemetry.h    # Observability: time profiler and sysinfo dashboard
 ├── src/
 │   ├── alias.c        # Alias dictionary and recursive-safe substitution
 │   ├── arithmetic.c   # Integer arithmetic parser, precedence, and logic
-│   ├── builtins.c     # Implementations of cd, pwd, export, unset, env, alias, unalias, safemode, jobs, sysinfo, history, help, exit
-│   ├── execute.c      # Execution engine, extended I/O redirection, pipelines, and hooks
+│   ├── builtins.c     # Implementations of cd, pwd, export, unset, env, alias, etc.
+│   ├── completion.c   # Filesystem and built-in tab autocompletion engine
+│   ├── execute.c      # Execution engine, pipelines, and command chaining
+│   ├── expander.c     # Variable, command substitution, and math expansion
 │   ├── fuzzy.c        # Typo correction and PATH binary candidate discovery
+│   ├── highlight.c    # Real-time ANSI terminal syntax highlighter
 │   ├── history.c      # In-memory history buffer and file persistence (~/.apex_history)
 │   ├── jobs.c         # Job list management and zombie process cleanup
-│   ├── linereader.c   # Raw termios engine, ghost text suggestions, cursor motion, completion
+│   ├── linereader.c   # Raw termios engine, ghost text suggestions, cursor motion
 │   ├── main.c         # REPL loop, script execution (.apex), and -c execution
-│   ├── parser.c       # Tokenizer, zero-overhead git discovery, and variable expansion
+│   ├── parser.c       # Pure lexer, tokenizer, and token memory management
+│   ├── prompt.c       # Git branch discovery and dynamic ANSI prompt
+│   ├── redirection.c  # Extended file descriptor redirection engine
 │   ├── safety.c       # Destructive command interception and safemode engine
 │   ├── signals.c      # Signal setup and prompt protection
 │   └── telemetry.c    # getrusage profiling and /proc system metrics parser

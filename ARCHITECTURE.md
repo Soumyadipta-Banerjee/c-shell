@@ -53,14 +53,19 @@ This document details the architectural layout, component boundaries, execution 
 | Subsystem | Header | Implementation | Primary Responsibilities |
 | :--- | :--- | :--- | :--- |
 | **Main / Lifecycle** | `include/parser.h`, `include/execute.h` | `src/main.c` | Program entrypoint, signals init, jobs init, REPL loop, exit teardown. |
-| **Parser & Lexer** | `include/parser.h` | `src/parser.c` | Line reading (`getchar`), quoting state machine, tokenization, operator splitting (`;`, `&&`, `||`, `&`, `|`, `<`, `>`), and runtime variable expansion (`$VAR`, `$?`). |
-| **Execution Engine** | `include/execute.h` | `src/execute.c` | Chaining flow control (short-circuit logic), argument expansion, file redirection (`dup2`), multi-stage pipeline creation, and process launching. |
-| **Built-ins** | `include/builtins.h` | `src/builtins.c` | In-process commands that modify shell state (`cd`, `exit`, `pwd`, `help`, `jobs`, and future `export`, `unset`, `alias`). |
+| **Parser & Lexer** | `include/parser.h` | `src/parser.c` | Line reading (`getchar`), quoting state machine, tokenization, operator splitting (`;`, `&&`, `||`, `&`, `|`, `<`, `>`), and token lifecycle. |
+| **Expansion Engine** | `include/expander.h` | `src/expander.c` | Runtime variable expansion (`$VAR`, `${VAR}`, `$?`, `$$`), subshell command capture (`$(cmd)`, `` `cmd` ``), arithmetic bridge, and tildes (`~`). |
+| **Prompt & Git** | `include/prompt.h` | `src/prompt.c` | Git branch discovery parsing `.git/HEAD` directly without subprocesses, dynamic ANSI prompt rendering with path shortening. |
+| **Execution Engine** | `include/execute.h` | `src/execute.c` | Chaining flow control (short-circuit logic), argument expansion, multi-stage pipeline creation, and process launching. |
+| **Redirection Engine** | `include/redirection.h` | `src/redirection.c` | Extended file descriptor redirection (`<`, `>`, `>>`, `2>`, `2>>`, `&>`, `2>&1`, `1>&2`), and argument stream compaction. |
+| **Built-ins** | `include/builtins.h` | `src/builtins.c` | In-process commands that modify shell state (`cd`, `exit`, `pwd`, `help`, `jobs`, `export`, `unset`, `pushd`, `popd`, `dirs`, `z`, `source`). |
 | **Job Control** | `include/jobs.h` | `src/jobs.c` | Background task tracking linked list, non-blocking asynchronous zombie reaping (`waitpid` with `WNOHANG`), and job status formatting. |
 | **Telemetry & Observability** | `include/telemetry.h` | `src/telemetry.c` | Process profiling (`getrusage`, `clock_gettime`), execution telemetry interceptor (`time`), and `/proc` system resource dashboard (`sysinfo`). |
 | **Algorithmic Intelligence** | `include/fuzzy.h` | `src/fuzzy.c` | Damerau-Levenshtein distance calculation, typo correction, and PATH executable candidate discovery on `ENOENT`. |
 | **History & Scripting** | `include/history.h` | `src/history.c`, `src/main.c` | Script file parsing (`.apex`), one-liner execution (`-c`), command history recording, and `~/.apex_history` persistence. |
-| **Interactive Line Editor** | `include/linereader.h` | `src/linereader.c` | Raw terminal mode (`termios`), cursor navigation, history traversal, and Tab autocompletion for built-ins and paths. |
+| **Interactive Line Editor** | `include/linereader.h` | `src/linereader.c` | Raw terminal mode (`termios`), cursor navigation, ghost text suggestions, history browsing, and `Ctrl+R` reverse search. |
+| **Syntax Highlighter** | `include/highlight.h` | `src/highlight.c` | Real-time ANSI token coloring (commands, options, strings, variables, control operators, and arithmetic expressions). |
+| **Tab Autocompletion** | `include/completion.h` | `src/completion.c` | Filesystem traversal (`opendir`/`readdir`), built-in command completion, and longest common prefix calculation. |
 | **Command Aliases** | `include/alias.h` | `src/alias.c` | In-memory alias mapping table, recursion-safe token expansion in executor, `alias` and `unalias` built-ins. |
 | **Safety Shield** | `include/safety.h` | `src/safety.c` | Proactive interception of destructive commands (`rm -rf /`, `~`), confirmation prompt, and `safemode` control. |
 | **Arithmetic Engine** | `include/arithmetic.h` | `src/arithmetic.c` | Recursive-descent integer math evaluator (`$(( ... ))`), operator precedence, comparisons, logic, and division safety. |
