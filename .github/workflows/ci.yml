@@ -15,7 +15,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Build shell & test binaries
-        run: make all tests/unit/test_fuzzy tests/unit/test_alias
+        run: make all tests/unit/test_fuzzy tests/unit/test_alias tests/unit/test_arithmetic
 
       - name: Run C unit test suite
         run: make test-unit

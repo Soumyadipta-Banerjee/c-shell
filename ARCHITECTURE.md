@@ -63,6 +63,7 @@ This document details the architectural layout, component boundaries, execution 
 | **Interactive Line Editor** | `include/linereader.h` | `src/linereader.c` | Raw terminal mode (`termios`), cursor navigation, history traversal, and Tab autocompletion for built-ins and paths. |
 | **Command Aliases** | `include/alias.h` | `src/alias.c` | In-memory alias mapping table, recursion-safe token expansion in executor, `alias` and `unalias` built-ins. |
 | **Safety Shield** | `include/safety.h` | `src/safety.c` | Proactive interception of destructive commands (`rm -rf /`, `~`), confirmation prompt, and `safemode` control. |
+| **Arithmetic Engine** | `include/arithmetic.h` | `src/arithmetic.c` | Recursive-descent integer math evaluator (`$(( ... ))`), operator precedence, comparisons, logic, and division safety. |
 | **Signal Handling** | `include/signals.h` | `src/signals.c` | POSIX `sigaction` registration for `SIGINT` and `SIGTSTP`, shielding the interactive prompt and delegating signals to foreground child processes. |
 
 ---
@@ -111,11 +112,26 @@ typedef struct Alias {
     struct Alias *next;  // Singly linked list pointer
 } Alias;
 ```
-* **Recursion Guard**: Expansion tracks expansion depth or identity matching to prevent infinite loops when an alias aliases itself (e.g. `alias ls='ls --color=auto'`).
-* **Substitution Timing**: Intercepted in `lsh_execute()`: if `args[0]` matches an alias, it is replaced and recursively repacked before built-in or external execution.
 
-### 3.4 Interactive Line Editor & Autocompletion
+### 3.4 Arithmetic Engine & Extended Redirections
+* **Recursive Descent AST-less Evaluator**: `evaluate_arithmetic_expression()` processes mathematical expressions with standard C operator precedence without requiring heap-allocated ASTs:
+  - Level 1: Logical OR (`||`)
+  - Level 2: Logical AND (`&&`)
+  - Level 3: Equality / Inequality (`==`, `!=`)
+  - Level 4: Relational (`<`, `<=`, `>`, `>=`)
+  - Level 5: Additive (`+`, `-`)
+  - Level 6: Multiplicative (`*`, `/`, `%`)
+  - Level 7: Unary (`+`, `-`, `!`, `~`)
+  - Level 8: Primary (integers, variables `$VAR` or `VAR`, parenthesized sub-expressions `(expr)`).
+* **Extended File Descriptors**: `handle_redirection()` processes redirection tokens sequentially in the child process using `dup2()`:
+  - `2>` and `2>>`: `open(file, O_WRONLY | O_CREAT | (TRUNC/APPEND), 0644)` followed by `dup2(fd, STDERR_FILENO)`.
+  - `&>`: Redirects both `STDOUT_FILENO` and `STDERR_FILENO` to the same file.
+  - `2>&1`: `dup2(STDOUT_FILENO, STDERR_FILENO)`.
+  - `1>&2`: `dup2(STDERR_FILENO, STDOUT_FILENO)`.
+
+### 3.5 Interactive Line Editor & Autocompletion
 * **Raw Termios State**: When `isatty(STDIN_FILENO)` is true, the shell configures the terminal into raw mode (`ICANON`, `ECHO`, `ISIG` disabled) with `VMIN=1` and `VTIME=0`.
+* **Fish-Style Ghost Text**: Evaluates history prefix matches on every keystroke and projects suggestions in faint grey (`\033[90m`), maintaining transparent cursor positioning. Accepts suggestions via `Right Arrow`, `End`, `Ctrl+F`, or `Ctrl+E`.
 * **Fallback Guarantee**: In non-interactive contexts (pipes, redirection, scripts), `lsh_read_interactive_line()` falls back to standard `lsh_read_line()` with zero terminal escape overhead.
 * **Autocompletion**: Intercepts `\t` (Tab). Scans registered built-in commands and the current working directory via `opendir`/`readdir`. If a unique candidate is found, completes inline; if multiple candidates share a prefix, completes the longest common prefix.
 
@@ -188,8 +204,8 @@ tests/
 │   └── profile.apex           # Startup configuration sourcing fixture
 ├── integration/               # Black-box shell execution suites partitioned by domain
 │   ├── test_builtins.sh       # pwd, cd, export, unset, env, pushd, popd, dirs, z (15 tests)
-│   ├── test_pipelines.sh      # |, <, >, >>, ;, &&, || (14 tests)
-│   ├── test_substitutions.sh  # $(), ``, '', "", $?, $VAR, ${VAR}, ~ (10 tests)
+│   ├── test_pipelines.sh      # |, <, >, >>, 2>, 2>>, &>, 2>&1, ;, &&, || (18 tests)
+│   ├── test_substitutions.sh  # $(), ``, $(( )), '', "", $?, $VAR, ${VAR}, ~ (14 tests)
 │   ├── test_jobs.sh           # &, jobs, fg, bg, kill, SIGINT, SIGTSTP (11 tests)
 │   ├── test_safety.sh         # safemode, dangerous deletion interception, aliases (7 tests)
 │   ├── test_observability.sh  # time profiler and sysinfo dashboard (5 tests)
@@ -197,7 +213,8 @@ tests/
 │   └── test_scripting.sh      # -c one-liners, .apex files, source/. (11 tests)
 └── unit/                      # Direct C unit tests for internal algorithms
     ├── test_fuzzy.c           # Damerau-Levenshtein dynamic programming matrix edge cases (17 tests)
-    └── test_alias.c           # In-memory alias dictionary, lookup, overwrite, cleanup (8 tests)
+    ├── test_alias.c           # In-memory alias dictionary, lookup, overwrite, cleanup (8 tests)
+    └── test_arithmetic.c      # Arithmetic engine, precedence, variables, error states (26 tests)
 ```
 
 ### 6.1 Reusable Test Assertion Harness (`test_framework.sh`)
@@ -208,5 +225,5 @@ tests/
 * **Instant Feedback (`make test-fast`)**: Skips sleep-based process management tests to validate parser, built-in, pipeline, and syntax logic in under 1.5 seconds.
 * **Domain Targeting (`make test-suite SUITE=<name>`)**: Executes a single integration suite for focused feature debugging (e.g. `make test-suite SUITE=substitutions`).
 * **C Unit Testing (`make test-unit`)**: Compiles and verifies algorithmic core components directly in native C in under 20ms.
-* **Full Battery (`make test-all`)**: Runs all 8 integration suites and all C unit suites in sequence (103 total assertions).
+* **Full Battery (`make test-all`)**: Runs all 8 integration suites and all 3 C unit suites in sequence (137 total assertions).
 

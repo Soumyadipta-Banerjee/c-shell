@@ -74,5 +74,30 @@ run_test "backticks command execution" \
     "Backtick: backtick_works" \
     "exact"
 
+# 11. Arithmetic Expansion: basic addition
+run_test "arithmetic expansion: basic addition" \
+    "echo \$(( 3 + 5 ))" \
+    "8" \
+    "exact"
+
+# 12. Arithmetic Expansion: precedence and parentheses
+run_test "arithmetic expansion: precedence and parentheses" \
+    "echo \$(( (2 + 3) * 4 ))" \
+    "20" \
+    "exact"
+
+# 13. Arithmetic Expansion: division and modulo
+run_test "arithmetic expansion: division and modulo" \
+    "echo \$(( 100 / 4 )) \$(( 17 % 5 ))" \
+    "25 2" \
+    "exact"
+
+# 14. Arithmetic Expansion: variables and inside double quotes
+run_test "arithmetic expansion: variables and inside double quotes" \
+    "export APEX_NUM=7
+echo \"Result: \$(( APEX_NUM * 6 ))\"" \
+    "Result: 42" \
+    "exact"
+
 suite_summary "Expansions & Quoting"
 exit $?

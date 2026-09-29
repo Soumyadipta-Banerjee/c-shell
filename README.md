@@ -10,13 +10,27 @@ A high-performance, portfolio-grade Unix shell written in C99 exploring POSIX sy
 
 ## Key Features
 
+- **Fish-Style Ghost Text Autosuggestions**:
+  - Real-time inline history suggestions rendered dynamically in faint grey ahead of the cursor without altering the line buffer.
+  - Transparent cursor alignment preserving 1:1 editing position.
+  - Instantly accept suggestions via `Right Arrow` or `End` (when at end of line), or `Ctrl+F` / `Ctrl+E` anywhere on the line.
+- **Extended POSIX File Descriptor Redirections**:
+  - `2> file`: Redirect standard error to overwrite file (`command 2> errors.log`).
+  - `2>> file`: Append standard error to file (`command 2>> errors.log`).
+  - `&> file`: Redirect both standard output and standard error to file (`command &> all.log`).
+  - `2>&1` & `1>&2`: Duplicate output file descriptors for seamless error stream merging.
+- **Built-in Integer Arithmetic Expansion (`$(( expression ))`)**:
+  - High-performance recursive-descent integer math evaluation engine.
+  - Supports arithmetic (`+`, `-`, `*`, `/`, `%`), relational (`<`, `<=`, `>`, `>=`), equality (`==`, `!=`), logical (`&&`, `||`), unary (`+`, `-`, `!`, `~`), and arbitrary parenthesized groupings.
+  - Automatic shell variable resolution (e.g., `VAR=5; echo $(( VAR * 2 + 1 ))` $\to$ `11`).
+  - Built-in division-by-zero and modulo-by-zero error detection.
 - **Subshell Command Substitution (`$(cmd)` & `` `cmd` ``)**:
   - Subshell execution with anonymous pipe stdout capturing and trailing newline stripping.
   - Seamlessly handles arbitrary nested pipelines, chaining, and redirections (`echo $(cat file | grep pattern | wc -l)`).
   - Preserves command substitution within double quotes (`"Count: $(ls | wc -l)"`) while preserving literal syntax inside single quotes.
 - **Live Terminal Syntax Highlighting**:
   - Real-time ANSI token coloring rendered dynamically inside raw `termios` editing mode.
-  - Green for valid built-ins and executables, Red for unrecognized commands, Yellow for command options/flags (`-la`), Cyan for quoted strings, and Magenta for control operators (`|`, `&&`, `;`, `>`, `>>`).
+  - Green for valid built-ins and executables, Red for unrecognized commands, Yellow for command options/flags (`-la`), Cyan for quoted strings and arithmetic expressions, and Magenta for control operators (`|`, `&&`, `;`, `>`, `>>`, `2>`, `&>`).
 - **Interactive Reverse History Search (`Ctrl+R`)**:
   - `(reverse-i-search)'<query>': <match>` prompt.
   - Incremental substring search with backward cycling across previous commands on repeated `Ctrl+R`.
@@ -121,24 +135,26 @@ A high-performance, portfolio-grade Unix shell written in C99 exploring POSIX sy
 apex-shell/
 ├── include/
 │   ├── alias.h        # Command alias table and expansion declarations
+│   ├── arithmetic.h   # Recursive-descent integer arithmetic evaluator ($(( ... )))
 │   ├── builtins.h     # Built-in declarations and dispatch table
 │   ├── execute.h      # Process execution, pipelines, and command chaining
 │   ├── fuzzy.h        # Damerau-Levenshtein distance & command suggestions
 │   ├── history.h      # Command history and persistent serialization
 │   ├── jobs.h         # Background job tracking and non-blocking reaping
-│   ├── linereader.h   # Raw termios line editing and tab autocompletion
+│   ├── linereader.h   # Raw termios line editing, ghost text, tab completion
 │   ├── parser.h       # Tokenization, quoting, prompt, and expansions
 │   ├── safety.h       # Proactive safety shield against destructive commands
 │   ├── signals.h      # Signal handlers (SIGINT, SIGTSTP)
 │   └── telemetry.h    # Observability: time profiler and sysinfo dashboard
 ├── src/
 │   ├── alias.c        # Alias dictionary and recursive-safe substitution
+│   ├── arithmetic.c   # Integer arithmetic parser, precedence, and logic
 │   ├── builtins.c     # Implementations of cd, pwd, export, unset, env, alias, unalias, safemode, jobs, sysinfo, history, help, exit
-│   ├── execute.c      # Execution engine, I/O redirection, pipelines, and hooks
+│   ├── execute.c      # Execution engine, extended I/O redirection, pipelines, and hooks
 │   ├── fuzzy.c        # Typo correction and PATH binary candidate discovery
 │   ├── history.c      # In-memory history buffer and file persistence (~/.apex_history)
 │   ├── jobs.c         # Job list management and zombie process cleanup
-│   ├── linereader.c   # Raw termios engine, cursor motion, and tab autocompletion
+│   ├── linereader.c   # Raw termios engine, ghost text suggestions, cursor motion, completion
 │   ├── main.c         # REPL loop, script execution (.apex), and -c execution
 │   ├── parser.c       # Tokenizer, zero-overhead git discovery, and variable expansion
 │   ├── safety.c       # Destructive command interception and safemode engine
@@ -148,7 +164,7 @@ apex-shell/
 │   ├── run_tests.sh       # Master test orchestrator
 │   ├── helpers/           # Reusable assertion library (test_framework.sh)
 │   ├── fixtures/          # Shared test scripts (.apex) and profile templates
-│   ├── integration/       # Domain-driven integration suites (78 tests)
+│   ├── integration/       # Domain-driven integration suites (86 tests)
 │   │   ├── test_builtins.sh
 │   │   ├── test_pipelines.sh
 │   │   ├── test_substitutions.sh
@@ -157,9 +173,10 @@ apex-shell/
 │   │   ├── test_observability.sh
 │   │   ├── test_fuzzy.sh
 │   │   └── test_scripting.sh
-│   └── unit/              # Algorithmic C unit tests (25 tests)
+│   └── unit/              # Algorithmic C unit tests (51 assertions)
 │       ├── test_fuzzy.c
-│       └── test_alias.c
+│       ├── test_alias.c
+│       └── test_arithmetic.c
 ├── .github/
 │   └── workflows/
 │       └── ci.yml     # Automated CI pipeline
@@ -291,6 +308,17 @@ COUNT=$(ls | wc -l)
 echo "Total files: $COUNT"
 echo `uname -s -r`
 
+# Arithmetic Expansion ($(( ... )))
+echo $(( 10 + 20 * 2 ))        # Prints 50
+echo $(( (100 - 20) / 4 ))     # Prints 20
+X=15; Y=3
+echo "Result: $(( X % Y == 0 ))" # Prints 1
+
+# Extended File Descriptor Redirections
+ls nonexistent 2> error.log    # Redirects stderr to file
+echo "Both streams" &> all.log # Redirects stdout & stderr
+cat input.txt > out.log 2>&1   # Merges stderr into stdout
+
 # Directory Stack Navigation
 pushd /tmp             # Pushes current directory and switches to /tmp
 dirs                   # Displays: /tmp /home/soumya/apex-shell
@@ -348,13 +376,14 @@ exit 0
 Apex Shell features a modular, two-tier test architecture combining native **C unit tests** with domain-driven **black-box integration suites** managed by `tests/run_tests.sh`:
 
 ### Test Organization
-- **C Unit Tests (`tests/unit/`)**: 25 assertions testing pure algorithms directly in C:
-  - `test_fuzzy.c`: Damerau-Levenshtein distance calculation, transpositions, substitutions, and suggestion ranking.
-  - `test_alias.c`: In-memory alias dictionary, insertion, lookup, overwriting, unsetting, and teardown.
-- **Integration Test Suites (`tests/integration/`)**: 78 test cases partitioned across 8 dedicated domains:
+- **C Unit Tests (`tests/unit/`)**: 51 assertions testing pure algorithms directly in C:
+  - `test_fuzzy.c`: Damerau-Levenshtein distance calculation, transpositions, substitutions, and suggestion ranking (17 assertions).
+  - `test_alias.c`: In-memory alias dictionary, insertion, lookup, overwriting, unsetting, and teardown (8 assertions).
+  - `test_arithmetic.c`: Recursive-descent math parser, precedence, unary/binary/relational ops, variables, division-by-zero checks (26 assertions).
+- **Integration Test Suites (`tests/integration/`)**: 86 test cases partitioned across 8 dedicated domains:
   - `test_builtins.sh`: Built-in commands (`pwd`, `cd`, `export`, `unset`, `env`, `dirs`, `pushd`, `popd`, `z`, `help`, `exit`).
-  - `test_pipelines.sh`: Arbitrary pipelines, I/O redirections (`<`, `>`, `>>`), and chaining operators (`;`, `&&`, `||`).
-  - `test_substitutions.sh`: Subshell command substitutions (`$(cmd)` & `` `cmd` ``), quoting (`''`, `""`), and variable expansions (`$VAR`, `${VAR}`, `$?`, `~`).
+  - `test_pipelines.sh`: Pipelines, standard & extended I/O redirections (`<`, `>`, `>>`, `2>`, `2>>`, `&>`, `2>&1`), chaining operators (`;`, `&&`, `||`).
+  - `test_substitutions.sh`: Subshell command substitutions (`$(cmd)` & `` `cmd` ``), arithmetic expansion (`$(( ... ))`), quoting (`''`, `""`), and variable expansions (`$VAR`, `${VAR}`, `$?`, `~`).
   - `test_jobs.sh`: Background execution (`&`), job tracking (`jobs`), process signaling (`kill`), foreground/background control (`fg`, `bg`), and signal protection (`SIGINT`, `SIGTSTP`).
   - `test_safety.sh`: Proactive safety shield (`safemode`), dangerous deletion prevention (`rm -rf /`), and command aliases (`alias`, `unalias`).
   - `test_observability.sh`: Command execution profiler (`time`) and kernel telemetry dashboard (`sysinfo`).
@@ -363,19 +392,19 @@ Apex Shell features a modular, two-tier test architecture combining native **C u
 
 ### Test Execution Commands
 ```bash
-# Run all integration suites (78 tests)
+# Run all integration suites (86 tests)
 make test
 
 # Ultra-fast runner skipping sleep tests (< 1.5s)
 make test-fast
 
-# Compile and run native C algorithmic unit tests (25 assertions)
+# Compile and run native C algorithmic unit tests (51 assertions)
 make test-unit
 
 # Run specific integration suite (e.g. substitutions, builtins, jobs, safety)
 make test-suite SUITE=substitutions
 
-# Run the complete test battery (Integration + Unit = 103 assertions)
+# Run the complete test battery (Integration + Unit = 137 assertions)
 make test-all
 ```
 

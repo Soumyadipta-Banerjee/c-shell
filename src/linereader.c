@@ -69,6 +69,20 @@ static void print_syntax_highlighted(const char *buf, size_t len)
             continue;
         }
 
+        // Extended fd redirections: 2>&1, 1>&2, 2>>, 2>, &>
+        if ((buf[i] == '2' && i + 1 < len && buf[i + 1] == '>') ||
+            (buf[i] == '1' && i + 1 < len && buf[i + 1] == '>'))
+        {
+            printf("\033[1;35m"); // Bold Magenta
+            while (i < len && !isspace((unsigned char)buf[i]) &&
+                   (buf[i] == '1' || buf[i] == '2' || buf[i] == '>' || buf[i] == '&'))
+            {
+                putchar(buf[i++]);
+            }
+            printf("\033[0m");
+            continue;
+        }
+
         // Operators
         if (buf[i] == '|' || buf[i] == '&' || buf[i] == ';' || buf[i] == '<' || buf[i] == '>')
         {
@@ -79,6 +93,21 @@ static void print_syntax_highlighted(const char *buf, size_t len)
             }
             printf("\033[0m");
             expecting_cmd = 1;
+            continue;
+        }
+
+        // Arithmetic expansion $(( ... ))
+        if (buf[i] == '$' && i + 1 < len && buf[i + 1] == '(' && i + 2 < len && buf[i + 2] == '(')
+        {
+            printf("\033[1;36m"); // Bright Cyan
+            while (i < len && buf[i] != ')')
+            {
+                putchar(buf[i++]);
+            }
+            if (i < len && buf[i] == ')') putchar(buf[i++]);
+            if (i < len && buf[i] == ')') putchar(buf[i++]);
+            printf("\033[0m");
+            expecting_cmd = 0;
             continue;
         }
 
@@ -167,6 +196,21 @@ static void print_syntax_highlighted(const char *buf, size_t len)
     printf("\033[0m");
 }
 
+static const char *get_ghost_suggestion(const char *buf, size_t len)
+{
+    if (len == 0) return NULL;
+    int count = history_get_count();
+    for (int i = count - 1; i >= 0; i--)
+    {
+        const char *item = history_get_item(i);
+        if (item && strncmp(item, buf, len) == 0 && strlen(item) > len)
+        {
+            return item + len;
+        }
+    }
+    return NULL;
+}
+
 static void refresh_line(const char *buf, size_t len, size_t pos)
 {
     printf("\r");
@@ -175,10 +219,26 @@ static void refresh_line(const char *buf, size_t len, size_t pos)
     {
         print_syntax_highlighted(buf, len);
     }
-    printf("\033[K");
-    if (pos < len)
+
+    const char *ghost = NULL;
+    if (pos == len)
     {
-        printf("\033[%dD", (int)(len - pos));
+        ghost = get_ghost_suggestion(buf, len);
+    }
+
+    if (ghost)
+    {
+        printf("\033[90m%s\033[0m", ghost); // Dim / gray ghost text
+        printf("\033[K");
+        printf("\033[%dD", (int)strlen(ghost)); // Keep cursor at pos
+    }
+    else
+    {
+        printf("\033[K");
+        if (pos < len)
+        {
+            printf("\033[%dD", (int)(len - pos));
+        }
     }
     fflush(stdout);
 }
@@ -391,6 +451,58 @@ char *lsh_read_interactive_line(void)
         {
             printf("\n");
             break;
+        }
+
+        // Ctrl+A: beginning of line (Home)
+        if (c == 1)
+        {
+            pos = 0;
+            refresh_line(buf, len, pos);
+            continue;
+        }
+
+        // Ctrl+E: end of line (and accept ghost suggestion if at end)
+        if (c == 5)
+        {
+            if (pos == len)
+            {
+                const char *ghost = get_ghost_suggestion(buf, len);
+                if (ghost)
+                {
+                    size_t glen = strlen(ghost);
+                    if (len + glen < sizeof(buf))
+                    {
+                        memcpy(buf + len, ghost, glen);
+                        len += glen;
+                        buf[len] = '\0';
+                    }
+                }
+            }
+            pos = len;
+            refresh_line(buf, len, pos);
+            continue;
+        }
+
+        // Ctrl+F: accept ghost suggestion
+        if (c == 6)
+        {
+            if (pos == len)
+            {
+                const char *ghost = get_ghost_suggestion(buf, len);
+                if (ghost)
+                {
+                    size_t glen = strlen(ghost);
+                    if (len + glen < sizeof(buf))
+                    {
+                        memcpy(buf + len, ghost, glen);
+                        len += glen;
+                        pos = len;
+                        buf[len] = '\0';
+                        refresh_line(buf, len, pos);
+                    }
+                }
+            }
+            continue;
         }
 
         // Ctrl+C: cancel current line
@@ -633,6 +745,22 @@ char *lsh_read_interactive_line(void)
                         pos++;
                         refresh_line(buf, len, pos);
                     }
+                    else if (pos == len)
+                    {
+                        const char *ghost = get_ghost_suggestion(buf, len);
+                        if (ghost)
+                        {
+                            size_t glen = strlen(ghost);
+                            if (len + glen < sizeof(buf))
+                            {
+                                memcpy(buf + len, ghost, glen);
+                                len += glen;
+                                pos = len;
+                                buf[len] = '\0';
+                                refresh_line(buf, len, pos);
+                            }
+                        }
+                    }
                 }
                 else if (seq[1] == 'D') // Left Arrow
                 {
@@ -649,6 +777,20 @@ char *lsh_read_interactive_line(void)
                 }
                 else if (seq[1] == 'F') // End
                 {
+                    if (pos == len)
+                    {
+                        const char *ghost = get_ghost_suggestion(buf, len);
+                        if (ghost)
+                        {
+                            size_t glen = strlen(ghost);
+                            if (len + glen < sizeof(buf))
+                            {
+                                memcpy(buf + len, ghost, glen);
+                                len += glen;
+                                buf[len] = '\0';
+                            }
+                        }
+                    }
                     pos = len;
                     refresh_line(buf, len, pos);
                 }

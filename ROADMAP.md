@@ -25,6 +25,8 @@ This document outlines the master roadmap for evolving `c-shell` into **Apex She
 │ Phase 7    │ POSIX Job Control (fg/bg/kill/Ctrl+Z) & Startup Profile   │
 ├────────────┼───────────────────────────────────────────────────────────┤
 │ Phase 8    │ Command Substitution $(), Syntax Colors, Ctrl+R, pushd/z  │
+├────────────┼───────────────────────────────────────────────────────────┤
+│ Phase 9    │ Ghost Autosuggestions, Extended Redirections, Math Engine │
 └────────────┴───────────────────────────────────────────────────────────┘
 ```
 
@@ -255,6 +257,49 @@ Equip `apex-shell` with subshell command substitution (`$(...)` & `` `...` ``), 
 - [x] Implement interactive `Ctrl+R` reverse search loop in `src/linereader.c`.
 - [x] Implement `pushd`, `popd`, `dirs`, and `z` in `src/builtins.c`.
 - [x] Add automated tests for substitution and directory navigation (tests 71-78).
+
+---
+
+## Phase 9: Ghost Autosuggestions, Extended Redirections & Arithmetic Expansion
+
+### Objectives
+Elevate interactive developer ergonomics with fish-style asynchronous inline ghost autosuggestions, complete POSIX file descriptor redirections (`2>`, `2>>`, `&>`, `2>&1`, `1>&2`), and a built-in integer arithmetic expansion engine (`$(( ... ))`).
+
+### Requirements & Specifications
+1. **Fish-Style Ghost Text Autosuggestions**:
+   - Searches historical entries for the most recent command beginning with the current line buffer.
+   - Renders remaining suggested text inline in faint grey (`\033[90m`) ahead of the cursor without altering underlying buffer.
+   - Moves physical terminal cursor back to maintain 1:1 positioning with buffer insertion index.
+   - Acceptance triggers:
+     - `Right Arrow` (`\033[C`) or `End` (`\033[F` / `\033[4~`) at end of line.
+     - `Ctrl+F` (`ASCII 6`) or `Ctrl+E` (`ASCII 5`) anywhere on the line.
+2. **Extended File Descriptor Redirection Engine**:
+   - `2> file`: Redirects standard error (FD 2) to truncate destination file.
+   - `2>> file`: Redirects standard error (FD 2) to append destination file.
+   - `&> file`: Redirects combined standard output and error (FD 1 & 2) to destination file.
+   - `2>&1`: Duplicates standard output file descriptor onto standard error descriptor (`dup2(1, 2)`).
+   - `1>&2`: Duplicates standard error file descriptor onto standard output descriptor (`dup2(2, 1)`).
+   - Supports arbitrary ordering and sequential chaining of multiple redirections in child processes.
+3. **Integer Arithmetic Expansion (`$(( expression ))`)**:
+   - Recursive-descent expression parser and evaluator (`evaluate_arithmetic_expression`).
+   - Supports:
+     - Binary operators: `+`, `-`, `*`, `/`, `%`.
+     - Comparison operators: `<`, `<=`, `>`, `>=`, `==`, `!=`.
+     - Logical operators: `&&`, `||`.
+     - Unary operators: `+`, `-`, `!`, `~`.
+     - Parenthesized groupings: `( ... )`.
+     - Variable resolution: both `$VAR` and naked `VAR` identifiers.
+   - Safe division/modulo-by-zero checks with error reporting.
+   - Tokenizer and variable expansion integration for `$(( ... ))` and syntax highlighting.
+
+### Implementation Checklist
+- [x] Implement recursive-descent integer arithmetic engine in `src/arithmetic.c` and `include/arithmetic.h`.
+- [x] Add arithmetic unit test suite `tests/unit/test_arithmetic.c` (26 unit assertions).
+- [x] Integrate arithmetic evaluation into variable expansion pipeline in `src/parser.c`.
+- [x] Implement extended FD redirections (`2>`, `2>>`, `&>`, `2>&1`, `1>&2`) in `src/parser.c` and `src/execute.c`.
+- [x] Implement inline faint ghost text rendering and acceptance shortcuts (`Right Arrow`, `End`, `Ctrl+F`, `Ctrl+E`) in `src/linereader.c`.
+- [x] Update syntax highlighter to colorize extended redirections and arithmetic expressions.
+- [x] Add automated unit and integration tests across pipelines and expansions.
 
 ---
 

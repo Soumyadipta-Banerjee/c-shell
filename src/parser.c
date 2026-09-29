@@ -4,6 +4,7 @@
 #include "parser.h"
 #include "signals.h"
 #include "execute.h"
+#include "arithmetic.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -210,7 +211,52 @@ static char *expand_variables_in_string(const char *str)
     const char *p = str;
     while (*p)
     {
-        if (*p == '$' && *(p + 1) == '(')
+        if (*p == '$' && *(p + 1) == '(' && *(p + 2) == '(')
+        {
+            p += 3; // skip "$(("
+            const char *start = p;
+            int depth = 1;
+            while (*p)
+            {
+                if (*p == '(')
+                {
+                    depth++;
+                }
+                else if (*p == ')')
+                {
+                    if (depth == 1 && *(p + 1) == ')')
+                    {
+                        break;
+                    }
+                    depth--;
+                }
+                p++;
+            }
+            size_t expr_len = p - start;
+            char expr[1024];
+            if (expr_len < sizeof(expr))
+            {
+                strncpy(expr, start, expr_len);
+                expr[expr_len] = '\0';
+                int err = 0;
+                long long val = evaluate_arithmetic_expression(expr, &err);
+                char num_buf[32];
+                snprintf(num_buf, sizeof(num_buf), "%lld", val);
+                size_t nlen = strlen(num_buf);
+                while (len + nlen + 1 > cap)
+                {
+                    cap *= 2;
+                    char *new_out = realloc(out, cap);
+                    if (!new_out) { free(out); return NULL; }
+                    out = new_out;
+                }
+                memcpy(out + len, num_buf, nlen);
+                len += nlen;
+            }
+            if (*p == ')') p++;
+            if (*p == ')') p++;
+        }
+        else if (*p == '$' && *(p + 1) == '(')
         {
             p += 2; // skip "$("
             const char *start = p;
@@ -470,7 +516,42 @@ ShellToken **lsh_split_line(char *line)
             exit(EXIT_FAILURE);
         }
 
-        if ((*p == '&' && *(p + 1) == '&') ||
+        if (*p == '2' && *(p + 1) == '>' && *(p + 2) == '&' && *(p + 3) == '1')
+        {
+            tok->text = malloc(5);
+            memcpy(tok->text, "2>&1", 5);
+            tok->is_literal = 0;
+            p += 4;
+        }
+        else if (*p == '1' && *(p + 1) == '>' && *(p + 2) == '&' && *(p + 3) == '2')
+        {
+            tok->text = malloc(5);
+            memcpy(tok->text, "1>&2", 5);
+            tok->is_literal = 0;
+            p += 4;
+        }
+        else if (*p == '2' && *(p + 1) == '>' && *(p + 2) == '>')
+        {
+            tok->text = malloc(4);
+            memcpy(tok->text, "2>>", 4);
+            tok->is_literal = 0;
+            p += 3;
+        }
+        else if (*p == '2' && *(p + 1) == '>')
+        {
+            tok->text = malloc(3);
+            memcpy(tok->text, "2>", 3);
+            tok->is_literal = 0;
+            p += 2;
+        }
+        else if (*p == '&' && *(p + 1) == '>')
+        {
+            tok->text = malloc(3);
+            memcpy(tok->text, "&>", 3);
+            tok->is_literal = 0;
+            p += 2;
+        }
+        else if ((*p == '&' && *(p + 1) == '&') ||
                  (*p == '|' && *(p + 1) == '|') ||
                  (*p == '>' && *(p + 1) == '>'))
         {

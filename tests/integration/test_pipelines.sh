@@ -104,5 +104,33 @@ echo after" \
     "after" \
     "exact"
 
+# 15. Extended Redirection: stderr redirection 2>
+run_test "stderr redirection (2>) writes error to file" \
+    "cat nonexistent_file_xyz 2> err.txt
+cat err.txt" \
+    "No such file or directory" \
+    "contains"
+
+# 16. Extended Redirection: stderr append redirection 2>>
+run_test "stderr append redirection (2>>) appends to file" \
+    "echo initial > append_err.txt
+cat nonexistent_file_xyz 2>> append_err.txt
+cat append_err.txt" \
+    "initial" \
+    "contains"
+
+# 17. Extended Redirection: &> redirects stdout and stderr
+run_test "combined output redirection (&>) writes stdout and stderr" \
+    "echo standard_out &> all.txt
+cat all.txt" \
+    "standard_out" \
+    "exact"
+
+# 18. Extended Redirection: 2>&1 merges stderr into stdout
+run_test "merging stderr to stdout (2>&1) captured in pipeline" \
+    "cat nonexistent_file_xyz 2>&1 | grep -o 'No such file'" \
+    "No such file" \
+    "exact"
+
 suite_summary "Pipelines & Operators"
 exit $?

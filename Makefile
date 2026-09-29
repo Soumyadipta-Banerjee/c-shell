@@ -1,10 +1,10 @@
 CC = gcc
 CFLAGS = -Wall -Wextra -pedantic -std=c99 -O2 -Iinclude
 TARGET = apex-shell
-SRCS = src/main.c src/builtins.c src/execute.c src/parser.c src/signals.c src/jobs.c src/telemetry.c src/fuzzy.c src/history.c src/alias.c src/safety.c src/linereader.c
+SRCS = src/main.c src/builtins.c src/execute.c src/parser.c src/signals.c src/jobs.c src/telemetry.c src/fuzzy.c src/history.c src/alias.c src/safety.c src/linereader.c src/arithmetic.c
 OBJS = $(SRCS:.c=.o)
 
-UNIT_TESTS = tests/unit/test_fuzzy tests/unit/test_alias
+UNIT_TESTS = tests/unit/test_fuzzy tests/unit/test_alias tests/unit/test_arithmetic
 
 all: $(TARGET)
 
@@ -19,6 +19,9 @@ tests/unit/test_fuzzy: tests/unit/test_fuzzy.c src/fuzzy.c
 	$(CC) $(CFLAGS) $^ -o $@
 
 tests/unit/test_alias: tests/unit/test_alias.c src/alias.c
+	$(CC) $(CFLAGS) $^ -o $@
+
+tests/unit/test_arithmetic: tests/unit/test_arithmetic.c src/arithmetic.c
 	$(CC) $(CFLAGS) $^ -o $@
 
 clean:
@@ -36,6 +39,7 @@ test-fast: $(TARGET)
 test-unit: $(UNIT_TESTS)
 	@./tests/unit/test_fuzzy
 	@./tests/unit/test_alias
+	@./tests/unit/test_arithmetic
 
 test-all: $(TARGET) $(UNIT_TESTS)
 	@bash tests/run_tests.sh --all
