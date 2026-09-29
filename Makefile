@@ -1,5 +1,5 @@
-CC = gcc
-CFLAGS = -Wall -Wextra -pedantic -std=c99 -O2 -Iinclude
+CC ?= gcc
+CFLAGS ?= -Wall -Wextra -pedantic -std=c99 -O2 -Iinclude
 TARGET = apex-shell
 SRCS = src/main.c src/builtins.c src/execute.c src/parser.c src/expander.c src/prompt.c src/redirection.c src/globber.c src/signals.c src/jobs.c src/telemetry.c src/fuzzy.c src/history.c src/alias.c src/safety.c src/linereader.c src/highlight.c src/completion.c src/arithmetic.c
 OBJS = $(SRCS:.c=.o)
@@ -56,4 +56,11 @@ test-all: $(TARGET) $(UNIT_TESTS)
 test-suite: $(TARGET)
 	@bash tests/run_tests.sh $(SUITE)
 
-.PHONY: all clean run test test-fast test-unit test-all test-suite
+asan:
+	$(MAKE) clean
+	$(MAKE) all $(UNIT_TESTS) CFLAGS="-Wall -Wextra -pedantic -std=c99 -O1 -g -fsanitize=address,undefined -Iinclude"
+
+test-asan: asan
+	@bash tests/run_tests.sh --all
+
+.PHONY: all clean run test test-fast test-unit test-all test-suite asan test-asan

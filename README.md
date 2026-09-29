@@ -448,6 +448,9 @@ make test-suite SUITE=substitutions
 
 # Run the complete test battery (Integration + Unit = 188 assertions across 13 suites)
 make test-all
+
+# Compile with AddressSanitizer & UBSan and verify zero memory leaks
+make test-asan
 ```
 
 ---

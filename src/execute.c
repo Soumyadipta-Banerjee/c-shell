@@ -446,36 +446,58 @@ int lsh_execute(char **args, int is_bg)
     if (num_cmds > 1)
     {
         char ***cmd_args = malloc(sizeof(char **) * num_cmds);
-        if (!cmd_args)
+        int *pipe_indices = malloc(sizeof(int) * num_cmds);
+        char **pipe_ptrs = malloc(sizeof(char *) * num_cmds);
+        if (!cmd_args || !pipe_indices || !pipe_ptrs)
         {
             fprintf(stderr, "lsh: allocation error\n");
+            free(cmd_args);
+            free(pipe_indices);
+            free(pipe_ptrs);
             return 1;
         }
 
         int cmd_idx = 0;
+        int pcount = 0;
         cmd_args[0] = &args[0];
 
         for (int i = 0; args[i] != NULL; i++)
         {
             if (strcmp(args[i], "|") == 0)
             {
+                pipe_indices[pcount] = i;
+                pipe_ptrs[pcount] = args[i];
+                pcount++;
                 args[i] = NULL;
                 cmd_idx++;
                 cmd_args[cmd_idx] = &args[i + 1];
             }
         }
 
+        int syntax_err = 0;
         for (int i = 0; i < num_cmds; i++)
         {
             if (cmd_args[i][0] == NULL)
             {
                 fprintf(stderr, "lsh: syntax error near unexpected token '|'\n");
-                free(cmd_args);
-                return 1;
+                syntax_err = 1;
+                break;
             }
         }
 
-        int status = lsh_execute_pipeline(cmd_args, num_cmds, is_bg);
+        int status = 1;
+        if (!syntax_err)
+        {
+            status = lsh_execute_pipeline(cmd_args, num_cmds, is_bg);
+        }
+
+        for (int p = 0; p < pcount; p++)
+        {
+            args[pipe_indices[p]] = pipe_ptrs[p];
+        }
+
+        free(pipe_indices);
+        free(pipe_ptrs);
         free(cmd_args);
         return status;
     }
