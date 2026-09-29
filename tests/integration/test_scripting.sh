@@ -119,5 +119,21 @@ history 1" \
     "history 1" \
     "contains"
 
+# 12. History expansion: !! repeats last command
+run_test "history expansion !! repeats previous command" \
+    "echo initial_expansion_test
+!!
+" \
+    "initial_expansion_test" \
+    "contains"
+
+# 13. History expansion: !$ repeats last argument
+run_test "history expansion !\$ repeats last argument" \
+    "echo apple orange
+echo !\$
+" \
+    "orange" \
+    "contains"
+
 suite_summary "Scripting, Sourcing & History"
 exit $?

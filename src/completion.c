@@ -3,12 +3,15 @@
 
 #include "completion.h"
 #include "builtins.h"
+#include "alias.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 #include <dirent.h>
 #include <sys/stat.h>
+
+extern char **environ;
 
 void complete_word(char *buf, size_t *len, size_t *pos, size_t buf_max)
 {
@@ -41,7 +44,7 @@ void complete_word(char *buf, size_t *len, size_t *pos, size_t buf_max)
     char *matches[256];
     int match_count = 0;
 
-    // 1. Built-in command completion
+    // 1. Built-in and Alias command completion
     if (is_command)
     {
         for (int i = 0; i < lsh_num_builtins() && match_count < 256; i++)
@@ -51,13 +54,50 @@ void complete_word(char *buf, size_t *len, size_t *pos, size_t buf_max)
                 matches[match_count++] = strdup(builtin_str[i]);
             }
         }
+        for (int i = 0; i < alias_get_count() && match_count < 256; i++)
+        {
+            const char *aname = alias_get_name(i);
+            if (aname && strncmp(aname, word, wlen) == 0)
+            {
+                matches[match_count++] = strdup(aname);
+            }
+        }
         if (strncmp("time", word, wlen) == 0 && match_count < 256)
         {
             matches[match_count++] = strdup("time");
         }
     }
 
-    // 2. File / Directory completion
+    // 2. Environment variable completion
+    if (word[0] == '$' && match_count < 256)
+    {
+        const char *var_prefix = word + 1;
+        size_t vlen = strlen(var_prefix);
+        if (environ)
+        {
+            for (char **env = environ; *env != NULL && match_count < 256; env++)
+            {
+                char *eq = strchr(*env, '=');
+                if (!eq) continue;
+                size_t klen = (size_t)(eq - *env);
+                if (klen >= vlen && strncmp(*env, var_prefix, vlen) == 0)
+                {
+                    char comp[256];
+                    if (klen + 2 < sizeof(comp))
+                    {
+                        comp[0] = '$';
+                        memcpy(comp + 1, *env, klen);
+                        comp[klen + 1] = '\0';
+                        matches[match_count++] = strdup(comp);
+                    }
+                }
+            }
+        }
+    }
+
+    // 3. File / Directory completion (if not completing a variable)
+    if (word[0] != '$')
+    {
     char dir_path[256] = ".";
     const char *file_prefix = word;
     char *last_slash = strrchr(word, '/');
@@ -110,6 +150,7 @@ void complete_word(char *buf, size_t *len, size_t *pos, size_t buf_max)
             }
         }
         closedir(dir);
+    }
     }
 
     if (match_count == 1)

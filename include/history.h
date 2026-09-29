@@ -21,6 +21,12 @@ int history_get_count(void);
 /* Get history item by 0-based index */
 const char *history_get_item(int index);
 
+/* Expand history references (!!, !$, !n, !-n) in input line.
+ * Returns newly allocated string or NULL on error / missing event.
+ * Sets *was_expanded to 1 if expansion occurred, 0 otherwise.
+ */
+char *history_expand(const char *input, int *was_expanded);
+
 /* Built-in history command */
 int lsh_history(char **args);
 

@@ -47,6 +47,20 @@ const char *alias_get(const char *name)
     return NULL;
 }
 
+int alias_get_count(void)
+{
+    return alias_count;
+}
+
+const char *alias_get_name(int index)
+{
+    if (index >= 0 && index < alias_count)
+    {
+        return aliases[index].name;
+    }
+    return NULL;
+}
+
 int alias_set(const char *name, const char *value)
 {
     if (!name || !value)

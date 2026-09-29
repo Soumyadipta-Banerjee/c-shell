@@ -184,6 +184,52 @@ char *lsh_read_interactive_line(void)
             continue;
         }
 
+        // Ctrl+K: kill line forward
+        if (c == 11)
+        {
+            len = pos;
+            buf[len] = '\0';
+            refresh_line(buf, len, pos);
+            continue;
+        }
+
+        // Ctrl+U: kill line backward
+        if (c == 21)
+        {
+            if (pos > 0)
+            {
+                memmove(buf, buf + pos, len - pos);
+                len -= pos;
+                pos = 0;
+                buf[len] = '\0';
+                refresh_line(buf, len, pos);
+            }
+            continue;
+        }
+
+        // Ctrl+W: delete previous word
+        if (c == 23)
+        {
+            if (pos > 0)
+            {
+                size_t orig_pos = pos;
+                while (pos > 0 && isspace((unsigned char)buf[pos - 1]))
+                {
+                    pos--;
+                }
+                while (pos > 0 && !isspace((unsigned char)buf[pos - 1]))
+                {
+                    pos--;
+                }
+                size_t del_count = orig_pos - pos;
+                memmove(buf + pos, buf + orig_pos, len - orig_pos);
+                len -= del_count;
+                buf[len] = '\0';
+                refresh_line(buf, len, pos);
+            }
+            continue;
+        }
+
         // Ctrl+L: clear screen
         if (c == 12)
         {

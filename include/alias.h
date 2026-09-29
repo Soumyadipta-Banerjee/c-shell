@@ -23,6 +23,10 @@ int alias_unset(const char *name);
 /* Get alias value for a given name, returns NULL if not found */
 const char *alias_get(const char *name);
 
+/* Enumerate aliases */
+int alias_get_count(void);
+const char *alias_get_name(int index);
+
 /* Built-in 'alias' command */
 int lsh_alias(char **args);
 

@@ -3,6 +3,7 @@
 
 #include "highlight.h"
 #include "builtins.h"
+#include "alias.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -23,6 +24,7 @@ static int is_executable_command(const char *cmd)
 {
     if (cmd[0] == '\0') return 0;
     if (is_builtin_command(cmd)) return 1;
+    if (alias_get(cmd) != NULL) return 1;
     if (strchr(cmd, '/'))
     {
         return access(cmd, X_OK) == 0;

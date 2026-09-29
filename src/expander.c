@@ -12,6 +12,8 @@
 #include <string.h>
 #include <ctype.h>
 #include <sys/wait.h>
+#include <signal.h>
+#include <errno.h>
 
 static char *capture_command_output(const char *cmd)
 {
@@ -27,6 +29,13 @@ static char *capture_command_output(const char *cmd)
         close(pipefd[0]);
         dup2(pipefd[1], STDOUT_FILENO);
         close(pipefd[1]);
+
+        signal(SIGINT, SIG_DFL);
+        signal(SIGQUIT, SIG_DFL);
+        signal(SIGTSTP, SIG_DFL);
+        signal(SIGTTIN, SIG_DFL);
+        signal(SIGTTOU, SIG_DFL);
+        signal(SIGPIPE, SIG_DFL);
 
         ShellToken **tokens = lsh_split_line((char *)cmd);
         if (tokens)
@@ -50,7 +59,7 @@ static char *capture_command_output(const char *cmd)
     if (!buf)
     {
         close(pipefd[0]);
-        waitpid(pid, NULL, 0);
+        while (waitpid(pid, NULL, 0) < 0 && errno == EINTR);
         return strdup("");
     }
 
@@ -72,11 +81,21 @@ static char *capture_command_output(const char *cmd)
         len += bytes;
     }
     close(pipefd[0]);
-    int status;
-    waitpid(pid, &status, 0);
+    int status = 0;
+    while (waitpid(pid, &status, 0) < 0)
+    {
+        if (errno != EINTR)
+        {
+            break;
+        }
+    }
     if (WIFEXITED(status))
     {
         g_last_exit_status = WEXITSTATUS(status);
+    }
+    else if (WIFSIGNALED(status))
+    {
+        g_last_exit_status = 128 + WTERMSIG(status);
     }
 
     // Strip trailing newlines (standard POSIX command substitution)

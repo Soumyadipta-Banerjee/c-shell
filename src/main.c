@@ -88,6 +88,21 @@ void lsh_loop(void)
             break;
         }
 
+        int was_expanded = 0;
+        char *expanded = history_expand(line, &was_expanded);
+        if (!expanded)
+        {
+            free(line);
+            continue;
+        }
+        if (was_expanded)
+        {
+            printf("%s\n", expanded);
+            fflush(stdout);
+        }
+        free(line);
+        line = expanded;
+
         history_add(line);
         char *ps_line = resolve_process_substitutions(line);
         tokens = lsh_split_line(ps_line ? ps_line : line);
