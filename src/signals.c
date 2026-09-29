@@ -13,7 +13,8 @@ static void sigint_handler(int signo)
     g_interrupted = 1;
     if (isatty(STDIN_FILENO))
     {
-        write(STDOUT_FILENO, "\n", 1);
+        ssize_t w = write(STDOUT_FILENO, "\n", 1);
+        (void)w;
     }
 }
 

@@ -143,7 +143,8 @@ int lsh_launch(char **args, int is_bg)
         {
             if (WTERMSIG(status) == SIGINT)
             {
-                write(STDOUT_FILENO, "\n", 1);
+                ssize_t w = write(STDOUT_FILENO, "\n", 1);
+                (void)w;
             }
         }
         else if (WIFSTOPPED(status))
@@ -356,7 +357,8 @@ int lsh_execute_pipeline(char ***cmd_args, int num_cmds, int is_bg)
 
     if (any_signaled)
     {
-        write(STDOUT_FILENO, "\n", 1);
+        ssize_t w = write(STDOUT_FILENO, "\n", 1);
+        (void)w;
     }
 
     free(pids);
