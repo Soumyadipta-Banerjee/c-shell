@@ -54,36 +54,56 @@ static char *build_cmd_str(char **args, int is_bg)
     return res;
 }
 
-int lsh_launch(char **args, int is_bg)
+static void setup_foreground_signals(int is_bg, struct sigaction *orig_int, struct sigaction *orig_tstp)
 {
-    pid_t pid;
-    int status;
-
-    struct sigaction sa_ignore, sa_orig_int, sa_orig_tstp;
     if (!is_bg)
     {
+        struct sigaction sa_ignore;
         memset(&sa_ignore, 0, sizeof(sa_ignore));
         sa_ignore.sa_handler = SIG_IGN;
         sigemptyset(&sa_ignore.sa_mask);
         sa_ignore.sa_flags = 0;
-        sigaction(SIGINT, &sa_ignore, &sa_orig_int);
-        sigaction(SIGTSTP, &sa_ignore, &sa_orig_tstp);
+        sigaction(SIGINT, &sa_ignore, orig_int);
+        sigaction(SIGTSTP, &sa_ignore, orig_tstp);
     }
+}
+
+static void restore_foreground_signals(int is_bg, const struct sigaction *orig_int, const struct sigaction *orig_tstp)
+{
+    if (!is_bg)
+    {
+        sigaction(SIGINT, orig_int, NULL);
+        sigaction(SIGTSTP, orig_tstp, NULL);
+    }
+}
+
+static void setup_child_signals(int is_bg)
+{
+    if (is_bg)
+    {
+        signal(SIGINT, SIG_IGN);
+        signal(SIGTSTP, SIG_IGN);
+    }
+    else
+    {
+        signal(SIGINT, SIG_DFL);
+        signal(SIGTSTP, SIG_DFL);
+    }
+}
+
+int lsh_launch(char **args, int is_bg)
+{
+    pid_t pid;
+    int status;
+    struct sigaction sa_orig_int, sa_orig_tstp;
+
+    setup_foreground_signals(is_bg, &sa_orig_int, &sa_orig_tstp);
 
     pid = fork();
     if (pid == 0)
     {
         setpgid(0, 0);
-        if (is_bg)
-        {
-            signal(SIGINT, SIG_IGN);
-            signal(SIGTSTP, SIG_IGN);
-        }
-        else
-        {
-            signal(SIGINT, SIG_DFL);
-            signal(SIGTSTP, SIG_DFL);
-        }
+        setup_child_signals(is_bg);
 
         handle_redirection(args);
         if (args[0] == NULL)
@@ -107,11 +127,7 @@ int lsh_launch(char **args, int is_bg)
     else if (pid < 0)
     {
         perror("lsh: fork");
-        if (!is_bg)
-        {
-            sigaction(SIGINT, &sa_orig_int, NULL);
-            sigaction(SIGTSTP, &sa_orig_tstp, NULL);
-        }
+        restore_foreground_signals(is_bg, &sa_orig_int, &sa_orig_tstp);
         return 1;
     }
     else
@@ -156,13 +172,11 @@ int lsh_launch(char **args, int is_bg)
             fflush(stdout);
             free(cmd_str);
 
-            sigaction(SIGINT, &sa_orig_int, NULL);
-            sigaction(SIGTSTP, &sa_orig_tstp, NULL);
+            restore_foreground_signals(is_bg, &sa_orig_int, &sa_orig_tstp);
             return 128 + WSTOPSIG(status);
         }
 
-        sigaction(SIGINT, &sa_orig_int, NULL);
-        sigaction(SIGTSTP, &sa_orig_tstp, NULL);
+        restore_foreground_signals(is_bg, &sa_orig_int, &sa_orig_tstp);
 
         if (WIFEXITED(status))
         {
@@ -197,16 +211,8 @@ int lsh_execute_pipeline(char ***cmd_args, int num_cmds, int is_bg)
         return 1;
     }
 
-    struct sigaction sa_ignore, sa_orig_int, sa_orig_tstp;
-    if (!is_bg)
-    {
-        memset(&sa_ignore, 0, sizeof(sa_ignore));
-        sa_ignore.sa_handler = SIG_IGN;
-        sigemptyset(&sa_ignore.sa_mask);
-        sa_ignore.sa_flags = 0;
-        sigaction(SIGINT, &sa_ignore, &sa_orig_int);
-        sigaction(SIGTSTP, &sa_ignore, &sa_orig_tstp);
-    }
+    struct sigaction sa_orig_int, sa_orig_tstp;
+    setup_foreground_signals(is_bg, &sa_orig_int, &sa_orig_tstp);
 
     for (int i = 0; i < num_cmds; i++)
     {
@@ -222,16 +228,7 @@ int lsh_execute_pipeline(char ***cmd_args, int num_cmds, int is_bg)
                 setpgid(0, pids[0]);
             }
 
-            if (is_bg)
-            {
-                signal(SIGINT, SIG_IGN);
-                signal(SIGTSTP, SIG_IGN);
-            }
-            else
-            {
-                signal(SIGINT, SIG_DFL);
-                signal(SIGTSTP, SIG_DFL);
-            }
+            setup_child_signals(is_bg);
 
             if (i > 0)
             {
@@ -289,11 +286,7 @@ int lsh_execute_pipeline(char ***cmd_args, int num_cmds, int is_bg)
         {
             perror("lsh: fork");
             free(pids);
-            if (!is_bg)
-            {
-                sigaction(SIGINT, &sa_orig_int, NULL);
-                sigaction(SIGTSTP, &sa_orig_tstp, NULL);
-            }
+            restore_foreground_signals(is_bg, &sa_orig_int, &sa_orig_tstp);
             return 1;
         }
         else
@@ -375,8 +368,7 @@ int lsh_execute_pipeline(char ***cmd_args, int num_cmds, int is_bg)
     int ret_status = (g_shell_opts.pipefail && rightmost_fail_status != 0) ? rightmost_fail_status : last_status;
 
     free(pids);
-    sigaction(SIGINT, &sa_orig_int, NULL);
-    sigaction(SIGTSTP, &sa_orig_tstp, NULL);
+    restore_foreground_signals(is_bg, &sa_orig_int, &sa_orig_tstp);
     return ret_status;
 }
 

@@ -8,6 +8,31 @@
 #include <unistd.h>
 #include <fcntl.h>
 
+static void check_target_arg(const char *arg)
+{
+    if (arg == NULL)
+    {
+        fprintf(stderr, "lsh: syntax error near unexpected token 'newline'\n");
+        exit(EXIT_FAILURE);
+    }
+}
+
+static void redirect_file(const char *path, int target_fd, int flags, const char *err_label)
+{
+    int fd = open(path, flags, 0644);
+    if (fd < 0)
+    {
+        perror(err_label);
+        exit(EXIT_FAILURE);
+    }
+    if (dup2(fd, target_fd) < 0)
+    {
+        perror("lsh: dup2");
+        exit(EXIT_FAILURE);
+    }
+    close(fd);
+}
+
 void handle_redirection(char **args)
 {
     int i = 0, j = 0;
@@ -16,32 +41,13 @@ void handle_redirection(char **args)
     {
         if (strcmp(args[i], "<") == 0)
         {
-            if (args[i + 1] == NULL)
-            {
-                fprintf(stderr, "lsh: syntax error near unexpected token 'newline'\n");
-                exit(EXIT_FAILURE);
-            }
-            int in_fd = open(args[i + 1], O_RDONLY);
-            if (in_fd < 0)
-            {
-                perror("lsh: input redirection");
-                exit(EXIT_FAILURE);
-            }
-            if (dup2(in_fd, STDIN_FILENO) < 0)
-            {
-                perror("lsh: dup2 input");
-                exit(EXIT_FAILURE);
-            }
-            close(in_fd);
+            check_target_arg(args[i + 1]);
+            redirect_file(args[i + 1], STDIN_FILENO, O_RDONLY, "lsh: input redirection");
             i += 2;
         }
         else if (strcmp(args[i], "<<<") == 0)
         {
-            if (args[i + 1] == NULL)
-            {
-                fprintf(stderr, "lsh: syntax error near unexpected token 'newline'\n");
-                exit(EXIT_FAILURE);
-            }
+            check_target_arg(args[i + 1]);
             int pfd[2];
             if (pipe(pfd) < 0)
             {
@@ -64,11 +70,7 @@ void handle_redirection(char **args)
         }
         else if (strcmp(args[i], "<<") == 0)
         {
-            if (args[i + 1] == NULL)
-            {
-                fprintf(stderr, "lsh: syntax error near unexpected token 'newline'\n");
-                exit(EXIT_FAILURE);
-            }
+            check_target_arg(args[i + 1]);
             const char *delim = args[i + 1];
             int pfd[2];
             if (pipe(pfd) < 0)
@@ -127,107 +129,37 @@ void handle_redirection(char **args)
         }
         else if (strcmp(args[i], ">") == 0)
         {
-            if (args[i + 1] == NULL)
-            {
-                fprintf(stderr, "lsh: syntax error near unexpected token 'newline'\n");
-                exit(EXIT_FAILURE);
-            }
-            int out_fd = open(args[i + 1], O_WRONLY | O_CREAT | O_TRUNC, 0644);
-            if (out_fd < 0)
-            {
-                perror("lsh: output redirection");
-                exit(EXIT_FAILURE);
-            }
-            if (dup2(out_fd, STDOUT_FILENO) < 0)
-            {
-                perror("lsh: dup2 output");
-                exit(EXIT_FAILURE);
-            }
-            close(out_fd);
+            check_target_arg(args[i + 1]);
+            redirect_file(args[i + 1], STDOUT_FILENO, O_WRONLY | O_CREAT | O_TRUNC, "lsh: output redirection");
             i += 2;
         }
         else if (strcmp(args[i], ">>") == 0)
         {
-            if (args[i + 1] == NULL)
-            {
-                fprintf(stderr, "lsh: syntax error near unexpected token 'newline'\n");
-                exit(EXIT_FAILURE);
-            }
-            int out_fd = open(args[i + 1], O_WRONLY | O_CREAT | O_APPEND, 0644);
-            if (out_fd < 0)
-            {
-                perror("lsh: output redirection");
-                exit(EXIT_FAILURE);
-            }
-            if (dup2(out_fd, STDOUT_FILENO) < 0)
-            {
-                perror("lsh: dup2 append");
-                exit(EXIT_FAILURE);
-            }
-            close(out_fd);
+            check_target_arg(args[i + 1]);
+            redirect_file(args[i + 1], STDOUT_FILENO, O_WRONLY | O_CREAT | O_APPEND, "lsh: output redirection");
             i += 2;
         }
         else if (strcmp(args[i], "2>") == 0)
         {
-            if (args[i + 1] == NULL)
-            {
-                fprintf(stderr, "lsh: syntax error near unexpected token 'newline'\n");
-                exit(EXIT_FAILURE);
-            }
-            int err_fd = open(args[i + 1], O_WRONLY | O_CREAT | O_TRUNC, 0644);
-            if (err_fd < 0)
-            {
-                perror("lsh: stderr redirection");
-                exit(EXIT_FAILURE);
-            }
-            if (dup2(err_fd, STDERR_FILENO) < 0)
-            {
-                perror("lsh: dup2 stderr");
-                exit(EXIT_FAILURE);
-            }
-            close(err_fd);
+            check_target_arg(args[i + 1]);
+            redirect_file(args[i + 1], STDERR_FILENO, O_WRONLY | O_CREAT | O_TRUNC, "lsh: stderr redirection");
             i += 2;
         }
         else if (strcmp(args[i], "2>>") == 0)
         {
-            if (args[i + 1] == NULL)
-            {
-                fprintf(stderr, "lsh: syntax error near unexpected token 'newline'\n");
-                exit(EXIT_FAILURE);
-            }
-            int err_fd = open(args[i + 1], O_WRONLY | O_CREAT | O_APPEND, 0644);
-            if (err_fd < 0)
-            {
-                perror("lsh: stderr append redirection");
-                exit(EXIT_FAILURE);
-            }
-            if (dup2(err_fd, STDERR_FILENO) < 0)
-            {
-                perror("lsh: dup2 stderr append");
-                exit(EXIT_FAILURE);
-            }
-            close(err_fd);
+            check_target_arg(args[i + 1]);
+            redirect_file(args[i + 1], STDERR_FILENO, O_WRONLY | O_CREAT | O_APPEND, "lsh: stderr append redirection");
             i += 2;
         }
         else if (strcmp(args[i], "&>") == 0)
         {
-            if (args[i + 1] == NULL)
-            {
-                fprintf(stderr, "lsh: syntax error near unexpected token 'newline'\n");
-                exit(EXIT_FAILURE);
-            }
-            int all_fd = open(args[i + 1], O_WRONLY | O_CREAT | O_TRUNC, 0644);
-            if (all_fd < 0)
-            {
-                perror("lsh: all redirection");
-                exit(EXIT_FAILURE);
-            }
-            if (dup2(all_fd, STDOUT_FILENO) < 0 || dup2(all_fd, STDERR_FILENO) < 0)
+            check_target_arg(args[i + 1]);
+            redirect_file(args[i + 1], STDOUT_FILENO, O_WRONLY | O_CREAT | O_TRUNC, "lsh: all redirection");
+            if (dup2(STDOUT_FILENO, STDERR_FILENO) < 0)
             {
                 perror("lsh: dup2 all");
                 exit(EXIT_FAILURE);
             }
-            close(all_fd);
             i += 2;
         }
         else if (strcmp(args[i], "2>&1") == 0)

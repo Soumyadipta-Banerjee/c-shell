@@ -10,6 +10,23 @@
 #include <ctype.h>
 #include <errno.h>
 
+static void append_tok_char(char **buf, size_t *len, size_t *cap, char c)
+{
+    if (*len + 1 >= *cap)
+    {
+        *cap *= 2;
+        char *new_buf = realloc(*buf, *cap);
+        if (!new_buf)
+        {
+            free(*buf);
+            fprintf(stderr, "lsh: allocation error\n");
+            exit(EXIT_FAILURE);
+        }
+        *buf = new_buf;
+    }
+    (*buf)[(*len)++] = c;
+}
+
 #define LSH_TOK_BUFSIZE 64
 ShellToken **lsh_split_line(char *line)
 {
@@ -41,77 +58,67 @@ ShellToken **lsh_split_line(char *line)
             exit(EXIT_FAILURE);
         }
 
-        if (*p == '2' && *(p + 1) == '>' && *(p + 2) == '&' && *(p + 3) == '1')
+        if (strncmp(p, "2>&1", 4) == 0)
         {
-            tok->text = malloc(5);
-            memcpy(tok->text, "2>&1", 5);
+            tok->text = strdup("2>&1");
             tok->is_literal = 0;
             p += 4;
         }
-        else if (*p == '1' && *(p + 1) == '>' && *(p + 2) == '&' && *(p + 3) == '2')
+        else if (strncmp(p, "1>&2", 4) == 0)
         {
-            tok->text = malloc(5);
-            memcpy(tok->text, "1>&2", 5);
+            tok->text = strdup("1>&2");
             tok->is_literal = 0;
             p += 4;
         }
-        else if (*p == '2' && *(p + 1) == '>' && *(p + 2) == '>')
+        else if (strncmp(p, "2>>", 3) == 0)
         {
-            tok->text = malloc(4);
-            memcpy(tok->text, "2>>", 4);
+            tok->text = strdup("2>>");
             tok->is_literal = 0;
             p += 3;
         }
-        else if (*p == '2' && *(p + 1) == '>')
+        else if (strncmp(p, "2>", 2) == 0)
         {
-            tok->text = malloc(3);
-            memcpy(tok->text, "2>", 3);
+            tok->text = strdup("2>");
             tok->is_literal = 0;
             p += 2;
         }
-        else if (*p == '&' && *(p + 1) == '>')
+        else if (strncmp(p, "&>", 2) == 0)
         {
-            tok->text = malloc(3);
-            memcpy(tok->text, "&>", 3);
+            tok->text = strdup("&>");
             tok->is_literal = 0;
             p += 2;
         }
-        else if ((*p == '&' && *(p + 1) == '&') ||
-                 (*p == '|' && *(p + 1) == '|') ||
-                 (*p == '>' && *(p + 1) == '>'))
+        else if (strncmp(p, "&&", 2) == 0 ||
+                 strncmp(p, "||", 2) == 0 ||
+                 strncmp(p, ">>", 2) == 0)
         {
-            tok->text = malloc(3);
-            tok->text[0] = *p;
-            tok->text[1] = *(p + 1);
-            tok->text[2] = '\0';
+            char s[3] = {p[0], p[1], '\0'};
+            tok->text = strdup(s);
             tok->is_literal = 0;
             p += 2;
         }
-        else if (*p == '<' && *(p + 1) == '<' && *(p + 2) == '<')
+        else if (strncmp(p, "<<<", 3) == 0)
         {
-            tok->text = malloc(4);
-            memcpy(tok->text, "<<<", 4);
+            tok->text = strdup("<<<");
             tok->is_literal = 0;
             p += 3;
         }
-        else if (*p == '<' && *(p + 1) == '<')
+        else if (strncmp(p, "<<", 2) == 0)
         {
-            tok->text = malloc(3);
-            memcpy(tok->text, "<<", 3);
+            tok->text = strdup("<<");
             tok->is_literal = 0;
             p += 2;
         }
         else if (*p == ';' || *p == '|' || *p == '<' || *p == '>' || *p == '&')
         {
-            tok->text = malloc(2);
-            tok->text[0] = *p;
-            tok->text[1] = '\0';
+            char s[2] = {*p, '\0'};
+            tok->text = strdup(s);
             tok->is_literal = 0;
             p++;
         }
         else
         {
-            // Check if the entire token is wrapped in single quotes: 'literal'
+            int handled = 0;
             if (*p == '\'')
             {
                 char *q = p + 1;
@@ -123,135 +130,90 @@ ShellToken **lsh_split_line(char *line)
                                    q[1] == '\0' || q[1] == ';' || q[1] == '|' || q[1] == '&' ||
                                    q[1] == '<' || q[1] == '>'))
                 {
-                    size_t qlen = q - (p + 1);
-                    tok->text = malloc(qlen + 1);
-                    memcpy(tok->text, p + 1, qlen);
-                    tok->text[qlen] = '\0';
+                    tok->text = strndup(p + 1, (size_t)(q - (p + 1)));
                     tok->is_literal = 1;
                     p = q + 1;
-                    tokens[position++] = tok;
-                    if (position >= bufsize)
-                    {
-                        bufsize += LSH_TOK_BUFSIZE;
-                        tokens = realloc(tokens, bufsize * sizeof(ShellToken *));
-                        if (!tokens)
-                        {
-                            fprintf(stderr, "lsh: allocation error\n");
-                            exit(EXIT_FAILURE);
-                        }
-                    }
-                    continue;
+                    handled = 1;
                 }
             }
 
-            size_t cap = 64;
-            size_t len = 0;
-            char *buf = malloc(cap);
-            if (!buf)
+            if (!handled)
             {
-                fprintf(stderr, "lsh: allocation error\n");
-                exit(EXIT_FAILURE);
-            }
+                size_t cap = 64;
+                size_t len = 0;
+                char *buf = malloc(cap);
+                if (!buf)
+                {
+                    fprintf(stderr, "lsh: allocation error\n");
+                    exit(EXIT_FAILURE);
+                }
 
-            while (*p && *p != ' ' && *p != '\t' && *p != '\r' && *p != '\n' &&
-                   *p != ';' && *p != '|' && *p != '&' && *p != '<' && *p != '>')
-            {
-                if (*p == '$' && *(p + 1) == '(')
+                while (*p && *p != ' ' && *p != '\t' && *p != '\r' && *p != '\n' &&
+                       *p != ';' && *p != '|' && *p != '&' && *p != '<' && *p != '>')
                 {
-                    if (len + 2 >= cap)
+                    if (*p == '$' && *(p + 1) == '(')
                     {
-                        cap *= 2;
-                        buf = realloc(buf, cap);
-                    }
-                    buf[len++] = *p++;
-                    buf[len++] = *p++;
-                    int depth = 1;
-                    while (*p && depth > 0)
-                    {
-                        if (*p == '(') depth++;
-                        else if (*p == ')') depth--;
-                        if (len + 1 >= cap)
+                        append_tok_char(&buf, &len, &cap, *p++);
+                        append_tok_char(&buf, &len, &cap, *p++);
+                        int depth = 1;
+                        while (*p && depth > 0)
                         {
-                            cap *= 2;
-                            buf = realloc(buf, cap);
+                            if (*p == '(') depth++;
+                            else if (*p == ')') depth--;
+                            append_tok_char(&buf, &len, &cap, *p++);
                         }
-                        buf[len++] = *p++;
                     }
-                }
-                else if (*p == '`')
-                {
-                    if (len + 1 >= cap)
+                    else if (*p == '`')
                     {
-                        cap *= 2;
-                        buf = realloc(buf, cap);
-                    }
-                    buf[len++] = *p++;
-                    while (*p && *p != '`')
-                    {
-                        if (len + 1 >= cap)
+                        append_tok_char(&buf, &len, &cap, *p++);
+                        while (*p && *p != '`')
                         {
-                            cap *= 2;
-                            buf = realloc(buf, cap);
+                            append_tok_char(&buf, &len, &cap, *p++);
                         }
-                        buf[len++] = *p++;
-                    }
-                    if (*p == '`')
-                    {
-                        if (len + 1 >= cap)
+                        if (*p == '`')
                         {
-                            cap *= 2;
-                            buf = realloc(buf, cap);
+                            append_tok_char(&buf, &len, &cap, *p++);
                         }
-                        buf[len++] = *p++;
                     }
-                }
-                else if (*p == '\'')
-                {
-                    p++;
-                    while (*p && *p != '\'')
-                    {
-                        if (len + 1 >= cap)
-                        {
-                            cap *= 2;
-                            buf = realloc(buf, cap);
-                        }
-                        buf[len++] = *p++;
-                    }
-                    if (*p == '\'')
+                    else if (*p == '\'')
                     {
                         p++;
-                    }
-                }
-                else if (*p == '"')
-                {
-                    p++;
-                    while (*p && *p != '"')
-                    {
-                        if (len + 1 >= cap)
+                        while (*p && *p != '\'')
                         {
-                            cap *= 2;
-                            buf = realloc(buf, cap);
+                            append_tok_char(&buf, &len, &cap, *p++);
                         }
-                        buf[len++] = *p++;
+                        if (*p == '\'')
+                        {
+                            p++;
+                        }
                     }
-                    if (*p == '"')
+                    else if (*p == '"')
                     {
                         p++;
+                        while (*p && *p != '"')
+                        {
+                            append_tok_char(&buf, &len, &cap, *p++);
+                        }
+                        if (*p == '"')
+                        {
+                            p++;
+                        }
                     }
-                }
-                else
-                {
-                    if (len + 1 >= cap)
+                    else
                     {
-                        cap *= 2;
-                        buf = realloc(buf, cap);
+                        append_tok_char(&buf, &len, &cap, *p++);
                     }
-                    buf[len++] = *p++;
                 }
+                buf[len] = '\0';
+                tok->text = buf;
+                tok->is_literal = 0;
             }
-            buf[len] = '\0';
-            tok->text = buf;
-            tok->is_literal = 0;
+        }
+
+        if (!tok->text)
+        {
+            fprintf(stderr, "lsh: allocation error\n");
+            exit(EXIT_FAILURE);
         }
 
         tokens[position++] = tok;
