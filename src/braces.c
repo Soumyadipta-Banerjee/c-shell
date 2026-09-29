@@ -110,7 +110,6 @@ static int add_to_list(char ***list, int *count, int *cap, char *item)
 }
 
 void free_brace_list(char **list, int count)
-
 {
     if (!list) return;
     for (int i = 0; i < count; i++)
@@ -119,6 +118,8 @@ void free_brace_list(char **list, int count)
     }
     free(list);
 }
+
+#define MAX_BRACE_RANGE_ITEMS 100000
 
 static int expand_range(const char *body, char ***out_items, int *out_count)
 {
@@ -167,20 +168,42 @@ static int expand_range(const char *body, char ***out_items, int *out_count)
 
         if (start <= end)
         {
+            if ((end - start) / step > MAX_BRACE_RANGE_ITEMS)
+            {
+                free_brace_list(items, count);
+                return -1;
+            }
             for (long long v = start; v <= end; v += step)
             {
                 char buf[32];
                 snprintf(buf, sizeof(buf), "%lld", v);
-                add_to_list(&items, &count, &cap, strdup(buf));
+                char *s = strdup(buf);
+                if (!s || add_to_list(&items, &count, &cap, s) != 0)
+                {
+                    free(s);
+                    free_brace_list(items, count);
+                    return -1;
+                }
             }
         }
         else
         {
+            if ((start - end) / step > MAX_BRACE_RANGE_ITEMS)
+            {
+                free_brace_list(items, count);
+                return -1;
+            }
             for (long long v = start; v >= end; v -= step)
             {
                 char buf[32];
                 snprintf(buf, sizeof(buf), "%lld", v);
-                add_to_list(&items, &count, &cap, strdup(buf));
+                char *s = strdup(buf);
+                if (!s || add_to_list(&items, &count, &cap, s) != 0)
+                {
+                    free(s);
+                    free_brace_list(items, count);
+                    return -1;
+                }
             }
         }
         *out_items = items;
@@ -198,7 +221,13 @@ static int expand_range(const char *body, char ***out_items, int *out_count)
             for (char c = c_start; c <= c_end; c += step)
             {
                 char buf[2] = { c, '\0' };
-                add_to_list(&items, &count, &cap, strdup(buf));
+                char *s = strdup(buf);
+                if (!s || add_to_list(&items, &count, &cap, s) != 0)
+                {
+                    free(s);
+                    free_brace_list(items, count);
+                    return -1;
+                }
             }
         }
         else
@@ -206,7 +235,13 @@ static int expand_range(const char *body, char ***out_items, int *out_count)
             for (char c = c_start; c >= c_end; c -= step)
             {
                 char buf[2] = { c, '\0' };
-                add_to_list(&items, &count, &cap, strdup(buf));
+                char *s = strdup(buf);
+                if (!s || add_to_list(&items, &count, &cap, s) != 0)
+                {
+                    free(s);
+                    free_brace_list(items, count);
+                    return -1;
+                }
             }
         }
         *out_items = items;
@@ -247,11 +282,18 @@ static int split_comma_items(const char *body, char ***out_items, int *out_count
         {
             size_t seg_len = p - start;
             char *seg = malloc(seg_len + 1);
-            if (seg)
+            if (!seg)
             {
-                strncpy(seg, start, seg_len);
-                seg[seg_len] = '\0';
-                add_to_list(&items, &count, &cap, seg);
+                free_brace_list(items, count);
+                return -1;
+            }
+            strncpy(seg, start, seg_len);
+            seg[seg_len] = '\0';
+            if (add_to_list(&items, &count, &cap, seg) != 0)
+            {
+                free(seg);
+                free_brace_list(items, count);
+                return -1;
             }
             if (*p == '\0') break;
             start = p + 1;
@@ -372,7 +414,13 @@ int expand_braces(const char *input, char ***out_list, int *out_count)
     {
         size_t combined_len = prefix_len + strlen(items[i]) + strlen(suffix) + 1;
         char *combined = malloc(combined_len);
-        if (!combined) continue;
+        if (!combined)
+        {
+            free(prefix);
+            free_brace_list(items, item_count);
+            free_brace_list(res_list, res_count);
+            return -1;
+        }
 
         snprintf(combined, combined_len, "%s%s%s", prefix, items[i], suffix);
 
@@ -383,13 +431,31 @@ int expand_braces(const char *input, char ***out_list, int *out_count)
         {
             for (int s = 0; s < sub_count; s++)
             {
-                add_to_list(&res_list, &res_count, &res_cap, sub_list[s]);
+                if (add_to_list(&res_list, &res_count, &res_cap, sub_list[s]) != 0)
+                {
+                    for (int rem = s + 1; rem < sub_count; rem++) free(sub_list[rem]);
+                    free(sub_list);
+                    free(combined);
+                    free(prefix);
+                    free_brace_list(items, item_count);
+                    free_brace_list(res_list, res_count);
+                    return -1;
+                }
             }
-            free(sub_list); // Free container only; items transferred to res_list
+            free(sub_list);
         }
         else
         {
-            add_to_list(&res_list, &res_count, &res_cap, strdup(combined));
+            char *dup = strdup(combined);
+            if (!dup || add_to_list(&res_list, &res_count, &res_cap, dup) != 0)
+            {
+                free(dup);
+                free(combined);
+                free(prefix);
+                free_brace_list(items, item_count);
+                free_brace_list(res_list, res_count);
+                return -1;
+            }
         }
 
         free(combined);
@@ -402,3 +468,4 @@ int expand_braces(const char *input, char ***out_list, int *out_count)
     *out_count = res_count;
     return 0;
 }
+
