@@ -70,6 +70,9 @@ This document details the architectural layout, component boundaries, execution 
 | **Command Aliases** | `include/alias.h` | `src/alias.c` | In-memory alias mapping table, recursion-safe token expansion in executor, `alias` and `unalias` built-ins. |
 | **Safety Shield** | `include/safety.h` | `src/safety.c` | Proactive interception of destructive commands (`rm -rf /`, `~`), confirmation prompt, and `safemode` control. |
 | **Arithmetic Engine** | `include/arithmetic.h` | `src/arithmetic.c` | Recursive-descent integer math evaluator (`$(( ... ))`), operator precedence, comparisons, logic, and division safety. |
+| **Brace Expansion** | `include/braces.h` | `src/braces.c` | Comma lists, numeric/character sequences with step increments, and recursive Cartesian product generation (`{a,b}`, `{1..5}`, `{c..a}`, `{A,B}{1,2}`). |
+| **Process Substitution**| `include/procsub.h` | `src/procsub.c` | Subshell pipeline execution via anonymous kernel pipes and `/dev/fd/<fd>` stream substitution (`<(cmd)`, `>(cmd)`). |
+| **Shell Execution Options**| `include/options.h` | `src/options.c` | Runtime execution option toggling (`errexit` `-e`, `xtrace` `-x`, `nounset` `-u`) and `set` built-in command. |
 | **Signal Handling** | `include/signals.h` | `src/signals.c` | POSIX `sigaction` registration for `SIGINT` and `SIGTSTP`, shielding the interactive prompt and delegating signals to foreground child processes. |
 
 ---
@@ -169,6 +172,22 @@ typedef struct Alias {
 * **Git Repository Telemetry**: `\g` natively checks `.git/HEAD` and git status without spawning child processes.
 * **Fallback**: When `$PS1` is unset, the prompt seamlessly falls back to the default Git-aware ANSI colored prompt format.
 
+### 3.12 Brace Expansion Engine (`expand_braces`)
+* **Recursive Precedence**: Brace expansion occurs prior to variable expansion and globbing. Single-quoted tokens (`'...'`) bypass expansion to preserve literal braces.
+* **Cartesian Generation**: Identifies innermost brace expressions (`{...}`) and computes the Cartesian product across multiple adjacent brace expressions (`{A,B}{1,2}` $\to$ `A1 A2 B1 B2`).
+* **Range Sequencing**: Evaluates numeric sequences (`{1..5}`, step `{1..9..3}`) and ASCII character sequences (`{a..e}`, reverse `{z..x}`) without external processes.
+
+### 3.13 Process Substitution Lifecycle (`<(cmd)` and `>(cmd)`)
+* **Anonymous Pipe IPC**: Prior to line tokenization, `resolve_process_substitutions()` detects `<(cmd)` and `>(cmd)` constructs. For each, an anonymous pipe is created via `pipe()`.
+* **Subshell Fork**: A subshell process is forked with `stdin` or `stdout` bound to the pipe descriptor, while the other end is held open in the parent. The construct in the command line is replaced with `/dev/fd/<pipe_fd>`.
+* **Deterministic Reaping**: After line execution completes, `reap_process_substitutions()` closes parent descriptors and reaps subshell child processes with `waitpid()`.
+
+### 3.14 Shell Execution Options Engine (`g_shell_opts`)
+* **Options State**: Global `ShellOptions` structure tracking `errexit` (`-e`), `xtrace` (`-x`), and `nounset` (`-u`).
+* **Nounset Integration**: Intercepts unset variables during `$VAR` and `${VAR}` expansion in `src/expander.c`, printing an error to `stderr` and setting exit status.
+* **Xtrace Integration**: Prints executed commands and expanded arguments prefixed with `+ ` to `stderr` prior to execution dispatch in `src/execute.c`.
+* **Errexit Integration**: Evaluates exit status in `lsh_execute_line()`; halts execution immediately if any command returns non-zero, unless guarded by a conditional `||` connector.
+
 ---
 
 ## 4. Upgradability & Extensibility Guidelines
@@ -223,9 +242,9 @@ tests/
 │   ├── sample.apex            # Script execution test fixture
 │   └── profile.apex           # Startup configuration sourcing fixture
 ├── integration/               # Black-box shell execution suites partitioned by domain
-│   ├── test_builtins.sh       # pwd, cd, export, unset, env, pushd, popd, dirs, z (15 tests)
+│   ├── test_builtins.sh       # pwd, cd, export, unset, env, pushd, popd, dirs, z, set (21 tests)
 │   ├── test_pipelines.sh      # |, <, >, >>, 2>, 2>>, &>, 2>&1, <<<, << DELIM, ;, &&, || (22 tests)
-│   ├── test_substitutions.sh  # $(), ``, $(( )), *, ?, [..], '', "", $?, $VAR, ${VAR}, ~ (18 tests)
+│   ├── test_substitutions.sh  # $(), ``, $(( )), *, ?, [..], {a,b}, <(cmd), '', "", $?, $VAR, ~ (25 tests)
 │   ├── test_jobs.sh           # &, jobs, fg, bg, kill, SIGINT, SIGTSTP (11 tests)
 │   ├── test_safety.sh         # safemode, dangerous deletion interception, aliases (7 tests)
 │   ├── test_observability.sh  # time profiler and sysinfo dashboard (5 tests)
@@ -236,7 +255,8 @@ tests/
     ├── test_alias.c           # In-memory alias dictionary, lookup, overwrite, cleanup (8 tests)
     ├── test_arithmetic.c      # Arithmetic engine, precedence, variables, error states (26 tests)
     ├── test_glob.c            # Wildcard globbing, meta detection, quotes, fallback (19 tests)
-    └── test_prompt.c          # PS1 format specifiers, user, host, git branch, cwd, colors (24 tests)
+    ├── test_prompt.c          # PS1 format specifiers, user, host, git branch, cwd, colors (24 tests)
+    └── test_braces.c          # Brace expansion comma lists, ranges, steps, cartesian (29 tests)
 ```
 
 ### 6.1 Reusable Test Assertion Harness (`test_framework.sh`)
@@ -246,6 +266,6 @@ tests/
 ### 6.2 Developer Ergonomics & Feedback Loops
 * **Instant Feedback (`make test-fast`)**: Skips sleep-based process management tests to validate parser, built-in, pipeline, and syntax logic in under 1.5 seconds.
 * **Domain Targeting (`make test-suite SUITE=<name>`)**: Executes a single integration suite for focused feature debugging (e.g. `make test-suite SUITE=substitutions`).
-* **C Unit Testing (`make test-unit`)**: Compiles and verifies algorithmic core components directly in native C in under 30ms (94 unit assertions).
-* **Full Battery (`make test-all`)**: Runs all 8 integration suites (94 tests) and all 5 C unit suites (94 assertions) in sequence (188 total assertions).
+* **C Unit Testing (`make test-unit`)**: Compiles and verifies algorithmic core components directly in native C in under 30ms (123 unit assertions across 6 suites).
+* **Full Battery (`make test-all`)**: Runs all 8 integration suites (107 tests) and all 6 C unit suites (123 assertions) in sequence (230 total assertions across 14 suites).
 

@@ -125,5 +125,48 @@ run_test "unmatched wildcard pattern preserved literally" \
     "unmatched_glob_*.xyz" \
     "exact"
 
+# 19. Brace expansion: comma list
+run_test "brace expansion comma list" \
+    "echo file_{alpha,beta}.txt" \
+    "file_alpha.txt file_beta.txt" \
+    "exact"
+
+# 20. Brace expansion: numeric range
+run_test "brace expansion numeric range" \
+    "echo {1..4}" \
+    "1 2 3 4" \
+    "exact"
+
+# 21. Brace expansion: descending character range
+run_test "brace expansion character range" \
+    "echo {c..a}" \
+    "c b a" \
+    "exact"
+
+# 22. Brace expansion: cartesian product
+run_test "brace expansion cartesian product" \
+    "echo {A,B}{1,2}" \
+    "A1 A2 B1 B2" \
+    "exact"
+
+# 23. Quoted braces: single quotes prevent brace expansion
+run_test "single quotes prevent brace expansion" \
+    "echo 'file_{a,b}.txt'" \
+    "file_{a,b}.txt" \
+    "exact"
+
+# 24. Process substitution: <(cmd) streams subshell output
+run_test "process substitution <(cmd) input stream" \
+    "cat <(echo 'process substitution output')" \
+    "process substitution output" \
+    "exact"
+
+# 25. Process substitution: multiple <(cmd) inputs
+run_test "multiple process substitutions" \
+    "cat <(echo 'stream1') <(echo 'stream2')" \
+    "stream1
+stream2" \
+    "exact"
+
 suite_summary "Expansions & Quoting"
 exit $?

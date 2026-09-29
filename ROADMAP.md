@@ -359,10 +359,55 @@ Equip `apex-shell` with native POSIX pathname wildcard pattern expansion (`*`, `
 
 ---
 
+## Phase 11: Brace Expansion, Process Substitution & Shell Execution Options
+
+### Objectives
+Equip `apex-shell` with advanced POSIX/Bash productivity expansions: recursive Cartesian brace expansion (`{a,b}`, `{1..5}`, `{c..a}`), asynchronous process substitution (`<(cmd)` and `>(cmd)`) via `/dev/fd/<fd>` streams, and a runtime shell execution options engine (`set -e`, `set -x`, `set -u`).
+
+### Requirements & Specifications
+1. **Brace Expansion Engine (`{a,b}`, `{1..5}`, `{c..a}`)**:
+   - High-performance recursive expansion generator (`src/braces.c` & `include/braces.h`).
+   - Supports:
+     - Comma-separated alternative lists: `file_{old,new}.c` $\to$ `file_old.c file_new.c`.
+     - Numeric sequences with optional step increments: `{1..5}` $\to$ `1 2 3 4 5`, `{1..9..3}` $\to$ `1 4 7`, reverse `{5..1}` $\to$ `5 4 3 2 1`.
+     - Character sequences: `{a..e}` $\to$ `a b c d e`, reverse `{z..x}` $\to$ `z y x`.
+     - Cartesian products: `{A,B}{1,2}` $\to$ `A1 A2 B1 B2`.
+   - Quote preservation: single quotes (`'{a,b}'`) preserve literal braces and bypass expansion.
+   - Expansion precedence: expands prior to variable expansion and pathname globbing so combinations like `src/{*.c,*.h}` operate naturally.
+2. **Process Substitution Engine (`<(cmd)` and `>(cmd)`)**:
+   - Subshell execution via anonymous kernel pipes (`src/procsub.c` & `include/procsub.h`).
+   - Supports:
+     - Input process substitution `<(cmd)`: spawns subshell with stdout redirected to pipe write descriptor, substituting command argument with `/dev/fd/<fd>`.
+     - Output process substitution `>(cmd)`: spawns subshell reading from pipe read descriptor, substituting command argument with `/dev/fd/<fd>`.
+     - Multiple concurrent process substitutions in a single line (e.g. `diff -u <(cat file1) <(cat file2)`).
+   - Lifecycle management: parent keeps file descriptors open until main command terminates, then invokes `reap_process_substitutions()` to close pipes and harvest child exit statuses.
+3. **Shell Execution Options Engine (`set -e`, `set -x`, `set -u`)**:
+   - Central shell option flags (`include/options.h` & `src/options.c`):
+     - `errexit` (`-e` / `+e`): Immediately exits execution on non-zero command return code, while correctly respecting `||` guards.
+     - `xtrace` (`-x` / `+x`): Prints each expanded command prefixed by `+ ` to stderr before execution.
+     - `nounset` (`-u` / `+u`): Reports an unbound variable error and prevents execution when expanding unset environment variables `$VAR` or `${VAR}`.
+   - Built-in `set`: lists current option states and environment when run with no arguments; parses `-e`, `-x`, `-u`, `+e`, `+x`, `+u` and long names (`-o errexit`, `+o xtrace`).
+
+### Implementation Checklist
+- [x] Create `include/braces.h` and `src/braces.c` implementing `has_brace_syntax`, `expand_braces`, and Cartesian generation.
+- [x] Create C unit test suite `tests/unit/test_braces.c` (29 unit assertions).
+- [x] Wire `expand_braces()` into token expansion pipeline in `src/globber.c`.
+- [x] Create `include/procsub.h` and `src/procsub.c` implementing `resolve_process_substitutions` and `reap_process_substitutions`.
+- [x] Integrate process substitution lifecycle into `src/main.c` (`lsh_loop`, `run_script_file`, `run_command_string`).
+- [x] Create `include/options.h` and `src/options.c` implementing `ShellOptions` and `lsh_set` built-in.
+- [x] Register `set` built-in in `include/builtins.h` and `src/builtins.c`.
+- [x] Wire `nounset` check into `src/expander.c` for `$VAR` and `${VAR}`.
+- [x] Wire `xtrace` and `errexit` checks into `src/execute.c`.
+- [x] Add automated integration tests in `test_builtins.sh` and `test_substitutions.sh`.
+- [x] Update build system `Makefile` and master runner `tests/run_tests.sh`.
+
+---
+
 ## 🧪 Testing & Verification Strategy
 
 Every phase must maintain:
 * **Zero Compiler Warnings**: `-Wall -Wextra -pedantic -std=c99 -O2`.
 * **Zero Memory Leaks**: Verified using AddressSanitizer (`-fsanitize=address`).
 * **Continuous Integration**: GitHub Actions CI workflow running `make && make test` on all pull requests and pushes.
+
 

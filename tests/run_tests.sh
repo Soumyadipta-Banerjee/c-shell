@@ -176,6 +176,17 @@ else
                 FAILED_SUITES=$((FAILED_SUITES + 1))
             fi
         fi
+
+        if [ -x "$SCRIPT_DIR/unit/test_braces" ]; then
+            TOTAL_SUITES=$((TOTAL_SUITES + 1))
+            echo -e "\n${BLUE}▶ Running C Unit Suite: brace expansion${NC}"
+            "$SCRIPT_DIR/unit/test_braces"
+            if [ $? -eq 0 ]; then
+                PASSED_SUITES=$((PASSED_SUITES + 1))
+            else
+                FAILED_SUITES=$((FAILED_SUITES + 1))
+            fi
+        fi
     fi
 fi
 

@@ -3,6 +3,7 @@
 
 #include "globber.h"
 #include "expander.h"
+#include "braces.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -81,47 +82,75 @@ char **expand_tokens_with_glob(ShellToken **tokens, int start, int len, int *out
     for (int j = 0; j < len; j++)
     {
         ShellToken *tok = tokens[start + j];
-        char *expanded = expand_token(tok);
-        if (!expanded)
+        char **brace_candidates = NULL;
+        int bcount = 0;
+
+        if (!tok->is_literal && has_brace_syntax(tok->text))
         {
-            continue;
+            expand_braces(tok->text, &brace_candidates, &bcount);
+        }
+        else
+        {
+            brace_candidates = malloc(sizeof(char *));
+            if (brace_candidates)
+            {
+                brace_candidates[0] = strdup(tok->text);
+                bcount = 1;
+            }
         }
 
-        if (!tok->is_literal && has_glob_meta(expanded))
+        if (!brace_candidates) continue;
+
+        for (int b = 0; b < bcount; b++)
         {
-            char **paths = NULL;
-            int pcount = 0;
-            if (expand_path_pattern(expanded, &paths, &pcount) == 0 && paths)
+            ShellToken tmp_tok;
+            tmp_tok.text = brace_candidates[b];
+            tmp_tok.is_literal = tok->is_literal;
+
+            char *expanded = expand_token(&tmp_tok);
+            if (!expanded)
             {
-                for (int k = 0; k < pcount; k++)
-                {
-                    if (count + 1 >= cap)
-                    {
-                        cap *= 2;
-                        char **new_args = realloc(args, (cap + 1) * sizeof(char *));
-                        if (!new_args) break;
-                        args = new_args;
-                    }
-                    args[count++] = paths[k];
-                }
-                free(paths);
-                free(expanded);
                 continue;
             }
+
+            if (!tok->is_literal && has_glob_meta(expanded))
+            {
+                char **paths = NULL;
+                int pcount = 0;
+                if (expand_path_pattern(expanded, &paths, &pcount) == 0 && paths)
+                {
+                    for (int k = 0; k < pcount; k++)
+                    {
+                        if (count + 1 >= cap)
+                        {
+                            cap *= 2;
+                            char **new_args = realloc(args, (cap + 1) * sizeof(char *));
+                            if (!new_args) break;
+                            args = new_args;
+                        }
+                        args[count++] = paths[k];
+                    }
+                    free(paths);
+                    free(expanded);
+                    continue;
+                }
+            }
+
+            if (count + 1 >= cap)
+            {
+                cap *= 2;
+                char **new_args = realloc(args, (cap + 1) * sizeof(char *));
+                if (!new_args)
+                {
+                    free(expanded);
+                    break;
+                }
+                args = new_args;
+            }
+            args[count++] = expanded;
         }
 
-        if (count + 1 >= cap)
-        {
-            cap *= 2;
-            char **new_args = realloc(args, (cap + 1) * sizeof(char *));
-            if (!new_args)
-            {
-                free(expanded);
-                break;
-            }
-            args = new_args;
-        }
-        args[count++] = expanded;
+        free_brace_list(brace_candidates, bcount);
     }
 
     args[count] = NULL;

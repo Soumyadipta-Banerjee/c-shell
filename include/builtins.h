@@ -23,6 +23,7 @@ int lsh_pushd(char **args);
 int lsh_popd(char **args);
 int lsh_dirs(char **args);
 int lsh_z(char **args);
+int lsh_set(char **args);
 
 int lsh_num_builtins(void);
 

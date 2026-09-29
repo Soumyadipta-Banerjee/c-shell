@@ -5,6 +5,7 @@
 #include "parser.h"
 #include "execute.h"
 #include "arithmetic.h"
+#include "options.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -275,6 +276,11 @@ static char *expand_variables_in_string(const char *str)
                         memcpy(out + len, val, vlen);
                         len += vlen;
                     }
+                    else if (g_shell_opts.nounset)
+                    {
+                        fprintf(stderr, "apex-shell: %s: unbound variable\n", var_name);
+                        g_last_exit_status = 1;
+                    }
                 }
                 if (*p == '}')
                 {
@@ -307,6 +313,11 @@ static char *expand_variables_in_string(const char *str)
                         }
                         memcpy(out + len, val, vlen);
                         len += vlen;
+                    }
+                    else if (g_shell_opts.nounset)
+                    {
+                        fprintf(stderr, "apex-shell: %s: unbound variable\n", var_name);
+                        g_last_exit_status = 1;
                     }
                 }
             }

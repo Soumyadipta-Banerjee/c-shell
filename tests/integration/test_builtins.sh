@@ -126,5 +126,50 @@ pwd" \
     "my_special_dir" \
     "contains"
 
+# 16. set displays options status
+run_test "set displays current options status" \
+    "set" \
+    "Current Shell Options:" \
+    "contains"
+
+# 17. set -u reports unbound variable
+run_test "set -u reports unbound variable error" \
+    "set -u
+echo \$DEFINITELY_UNSET_VAR_XYZ" \
+    "unbound variable" \
+    "contains"
+
+# 18. set +u disables nounset
+run_test "set +u disables nounset" \
+    "set -u
+set +u
+echo start\${DEFINITELY_UNSET_VAR_XYZ}end" \
+    "startend" \
+    "contains"
+
+# 19. set -x prints execution trace
+run_test "set -x prints command execution trace" \
+    "set -x
+echo hello_trace" \
+    "+ echo hello_trace" \
+    "contains"
+
+# 20. set -e halts execution on error
+run_test "set -e halts execution on command failure" \
+    "set -e
+ls /nonexistent_directory_for_errexit_test
+echo SHOULD_NOT_PRINT" \
+    "SHOULD_NOT_PRINT" \
+    "not_contains"
+
+# 21. set -e does not halt on || guarded failure
+run_test "set -e respects || error handling guard" \
+    "set -e
+ls /nonexistent_directory_for_errexit_test || echo GUARDED_RECOVERY
+echo STILL_RUNNING" \
+    "GUARDED_RECOVERY" \
+    "contains"
+
 suite_summary "Built-ins & Navigation"
 exit $?
+

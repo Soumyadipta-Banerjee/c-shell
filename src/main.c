@@ -11,6 +11,7 @@
 #include "linereader.h"
 #include "builtins.h"
 #include "redirection.h"
+#include "procsub.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -88,10 +89,13 @@ void lsh_loop(void)
         }
 
         history_add(line);
-        tokens = lsh_split_line(line);
+        char *ps_line = resolve_process_substitutions(line);
+        tokens = lsh_split_line(ps_line ? ps_line : line);
         resolve_heredocs(tokens, stdin_read_line_cb, NULL);
         lsh_execute_line(tokens);
+        reap_process_substitutions();
 
+        free(ps_line);
         free(line);
         lsh_free_tokens(tokens);
     }
@@ -126,10 +130,13 @@ static int run_script_file(const char *filename)
             continue;
         }
 
-        ShellToken **tokens = lsh_split_line(p);
+        char *ps_line = resolve_process_substitutions(p);
+        ShellToken **tokens = lsh_split_line(ps_line ? ps_line : p);
         resolve_heredocs(tokens, file_read_line_cb, f);
         lsh_execute_line(tokens);
+        reap_process_substitutions();
         lsh_free_tokens(tokens);
+        free(ps_line);
     }
 
     free(line);
@@ -140,17 +147,25 @@ static int run_script_file(const char *filename)
 static int run_command_string(const char *cmd)
 {
     const char *ptr = cmd;
-    char *first_line = string_read_line_cb(&ptr);
-    if (!first_line)
+    while (!g_should_exit && *ptr != '\0')
     {
-        return 0;
-    }
+        char *line = string_read_line_cb(&ptr);
+        if (!line) break;
+        if (line[0] == '\0' || line[0] == '#')
+        {
+            free(line);
+            continue;
+        }
 
-    ShellToken **tokens = lsh_split_line(first_line);
-    resolve_heredocs(tokens, string_read_line_cb, &ptr);
-    lsh_execute_line(tokens);
-    lsh_free_tokens(tokens);
-    free(first_line);
+        char *ps_line = resolve_process_substitutions(line);
+        ShellToken **tokens = lsh_split_line(ps_line ? ps_line : line);
+        resolve_heredocs(tokens, string_read_line_cb, &ptr);
+        lsh_execute_line(tokens);
+        reap_process_substitutions();
+        lsh_free_tokens(tokens);
+        free(ps_line);
+        free(line);
+    }
     return g_last_exit_status;
 }
 

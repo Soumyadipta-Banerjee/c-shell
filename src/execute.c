@@ -12,6 +12,7 @@
 #include "safety.h"
 #include "alias.h"
 #include "globber.h"
+#include "options.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -426,6 +427,17 @@ int lsh_execute(char **args, int is_bg)
         return 1;
     }
 
+    if (g_shell_opts.xtrace)
+    {
+        fprintf(stderr, "+");
+        for (int xi = 0; args[xi] != NULL; xi++)
+        {
+            fprintf(stderr, " %s", args[xi]);
+        }
+        fprintf(stderr, "\n");
+        fflush(stderr);
+    }
+
     if (strcmp(args[0], "time") == 0)
     {
         if (args[1] == NULL)
@@ -577,6 +589,15 @@ int lsh_execute_line(ShellToken **tokens)
                 g_last_exit_status = lsh_execute(args, is_bg);
 
                 free_glob_args(args, arg_count);
+
+                if (g_shell_opts.errexit && g_last_exit_status != 0)
+                {
+                    if (connector == NULL || strcmp(connector, "||") != 0)
+                    {
+                        g_should_exit = 1;
+                        return g_last_exit_status;
+                    }
+                }
             }
         }
 

@@ -10,6 +10,23 @@ A high-performance, portfolio-grade Unix shell written in C99 exploring POSIX sy
 
 ## Key Features
 
+- **Brace Expansion (`{a,b}`, `{1..5}`, `{c..a}`, `{A,B}{1,2}`)**:
+  - High-performance recursive Cartesian product generator and range sequence expander.
+  - Supports comma-separated alternative lists (`file_{old,new}.c` $\to$ `file_old.c file_new.c`).
+  - Integer range sequencing with optional step intervals (`{1..5}` $\to$ `1 2 3 4 5`, `{1..9..3}` $\to$ `1 4 7`, reverse `{5..1}`).
+  - ASCII character range sequencing (`{a..c}` $\to$ `a b c`, reverse `{z..x}`).
+  - Combinatorial Cartesian products across adjacent brace groups (`{A,B}{1,2}` $\to$ `A1 A2 B1 B2`).
+  - Preserved literally inside single quotes (`'{1..5}'`). Expands prior to variable expansion and pathname globbing.
+- **Process Substitution (`<(cmd)` and `>(cmd)`)**:
+  - Direct subshell pipeline streaming via anonymous kernel pipes and `/dev/fd/<fd>` descriptor substitution.
+  - Input process substitution `<(cmd)`: spawns subshell with stdout redirected to pipe write end, substituting `/dev/fd/<fd>` as argument (e.g. `diff -u <(cat file1) <(cat file2)`).
+  - Output process substitution `>(cmd)`: spawns subshell reading from pipe read end, substituting `/dev/fd/<fd>` as argument (e.g. `tar -cf >(gzip -c > backup.tar.gz) dir`).
+  - Supports multiple concurrent process substitutions per command line with deterministic file descriptor reaping.
+- **Shell Execution Options Engine (`set -e`, `set -x`, `set -u`)**:
+  - `set -e` / `set +e` (`errexit`): Immediately aborts command line execution when an external or built-in command exits with a non-zero status, while respecting `||` conditional recovery guards.
+  - `set -x` / `set +x` (`xtrace`): Prints executed command arguments prefixed with `+ ` to `stderr` prior to launch.
+  - `set -u` / `set +u` (`nounset`): Treats unset variables (`$UNSET` or `${UNSET}`) as an error, printing `unbound variable` to `stderr` and preventing execution.
+  - `set`: Displays formatted status of all shell options followed by current environment variables.
 - **Pathname Wildcard Globbing (`*`, `?`, `[...]`)**:
   - High-speed pattern expansion powered by POSIX `glob()`.
   - Supports asterisks (`*`) matching zero or more characters, question marks (`?`) matching single characters, and bracket ranges (`[a-z]`, `[0-9]`).
@@ -147,6 +164,7 @@ apex-shell/
 ├── include/
 │   ├── alias.h        # Command alias table and expansion declarations
 │   ├── arithmetic.h   # Recursive-descent integer arithmetic evaluator ($(( ... )))
+│   ├── braces.h       # Recursive brace expansion engine ({a,b}, {1..5}, Cartesian)
 │   ├── builtins.h     # Built-in declarations and dispatch table
 │   ├── completion.h   # Tab autocompletion for built-ins and directory paths
 │   ├── execute.h      # Process execution, pipelines, and command chaining
@@ -156,7 +174,9 @@ apex-shell/
 │   ├── history.h      # Command history and persistent serialization
 │   ├── jobs.h         # Background job tracking and non-blocking reaping
 │   ├── linereader.h   # Raw termios line editing, ghost text, keystroke dispatch
+│   ├── options.h      # Shell execution options (set -e, set -x, set -u)
 │   ├── parser.h       # Lexer, quoting state machine, and token lifecycle
+│   ├── procsub.h      # Process substitution engine (<(cmd), >(cmd), /dev/fd/<fd>)
 │   ├── prompt.h       # Git branch detection and dynamic prompt rendering
 │   ├── redirection.h  # Extended FD redirections (<, >, 2>, 2>>, &>, 2>&1)
 │   ├── safety.h       # Proactive safety shield against destructive commands
@@ -165,6 +185,7 @@ apex-shell/
 ├── src/
 │   ├── alias.c        # Alias dictionary and recursive-safe substitution
 │   ├── arithmetic.c   # Integer arithmetic parser, precedence, and logic
+│   ├── braces.c       # Brace expansion and Cartesian product generation
 │   ├── builtins.c     # Implementations of cd, pwd, export, unset, env, alias, etc.
 │   ├── completion.c   # Filesystem and built-in tab autocompletion engine
 │   ├── execute.c      # Execution engine, pipelines, and command chaining
@@ -175,7 +196,9 @@ apex-shell/
 │   ├── jobs.c         # Job list management and zombie process cleanup
 │   ├── linereader.c   # Raw termios engine, ghost text suggestions, cursor motion
 │   ├── main.c         # REPL loop, script execution (.apex), and -c execution
+│   ├── options.c      # Shell options engine and set built-in implementation
 │   ├── parser.c       # Pure lexer, tokenizer, and token memory management
+│   ├── procsub.c      # Subshell anonymous pipe IPC and /dev/fd lifecycle
 │   ├── prompt.c       # Git branch discovery and dynamic ANSI prompt
 │   ├── redirection.c  # Extended file descriptor redirection engine
 │   ├── safety.c       # Destructive command interception and safemode engine
@@ -185,7 +208,7 @@ apex-shell/
 │   ├── run_tests.sh       # Master test orchestrator
 │   ├── helpers/           # Reusable assertion library (test_framework.sh)
 │   ├── fixtures/          # Shared test scripts (.apex) and profile templates
-│   ├── integration/       # Domain-driven integration suites (86 tests)
+│   ├── integration/       # Domain-driven integration suites (107 tests)
 │   │   ├── test_builtins.sh
 │   │   ├── test_pipelines.sh
 │   │   ├── test_substitutions.sh
@@ -194,10 +217,13 @@ apex-shell/
 │   │   ├── test_observability.sh
 │   │   ├── test_fuzzy.sh
 │   │   └── test_scripting.sh
-│   └── unit/              # Algorithmic C unit tests (51 assertions)
+│   └── unit/              # Algorithmic C unit tests (123 assertions)
 │       ├── test_fuzzy.c
 │       ├── test_alias.c
-│       └── test_arithmetic.c
+│       ├── test_arithmetic.c
+│       ├── test_glob.c
+│       ├── test_prompt.c
+│       └── test_braces.c
 ├── .github/
 │   └── workflows/
 │       └── ci.yml     # Automated CI pipeline
@@ -254,10 +280,10 @@ apex-shell/
 
 5. **Run tests**:
    ```bash
-   make test       # Run all 8 integration suites (94 tests)
+   make test       # Run all 8 integration suites (107 tests)
    make test-fast  # Ultra-fast runner skipping sleep tests (< 1.5s)
-   make test-unit  # Algorithmic C unit tests (94 assertions across 5 suites)
-   make test-all   # Complete test suite: integration + unit (188 assertions)
+   make test-unit  # Algorithmic C unit tests (123 assertions across 6 suites)
+   make test-all   # Complete test suite: integration + unit (230 assertions across 14 suites)
    ```
 
 6. **Clean build artifacts**:
@@ -364,6 +390,25 @@ pushd /tmp             # Pushes current directory and switches to /tmp
 dirs                   # Displays: /tmp /home/soumya/apex-shell
 popd                   # Returns back to /home/soumya/apex-shell
 
+# Brace Expansion ({a,b}, {1..5}, Cartesian product)
+echo file_{old,new}.c          # Prints: file_old.c file_new.c
+echo {1..5}                    # Prints: 1 2 3 4 5
+echo {1..9..3}                 # Prints: 1 4 7 (step increment)
+echo {c..a}                    # Prints: c b a (reverse sequence)
+echo {A,B}{1,2}                # Prints: A1 A2 B1 B2 (Cartesian product)
+
+# Process Substitution (<(cmd) and >(cmd))
+diff -u <(echo -e "apple\nbanana") <(echo -e "apple\ncherry")
+cat <(ls src/*.c | grep braces)
+
+# Shell Execution Options Engine (set -e, set -x, set -u)
+set                            # Displays options status and environment
+set -x                         # Enables execution trace (prints + command)
+set +x                         # Disables execution trace
+set -u                         # Enables nounset (error on unset $VAR)
+set -e                         # Enables errexit (halts execution on error)
+false || echo "Handled!"       # Errexit respects || recovery guards
+
 # Smart Frecency Directory Jump
 z apex                 # Instantly jumps to highest-ranked match for 'apex'
 
@@ -416,37 +461,38 @@ exit 0
 Apex Shell features a modular, two-tier test architecture combining native **C unit tests** with domain-driven **black-box integration suites** managed by `tests/run_tests.sh`:
 
 ### Test Organization
-- **C Unit Tests (`tests/unit/`)**: 94 assertions testing pure algorithms directly in C:
+- **C Unit Tests (`tests/unit/`)**: 123 assertions testing pure algorithms directly in C:
   - `test_fuzzy.c`: Damerau-Levenshtein distance calculation, transpositions, substitutions, and suggestion ranking (17 assertions).
   - `test_alias.c`: In-memory alias dictionary, insertion, lookup, overwriting, unsetting, and teardown (8 assertions).
   - `test_arithmetic.c`: Recursive-descent math parser, precedence, unary/binary/relational ops, variables, division-by-zero checks (26 assertions).
   - `test_glob.c`: POSIX pathname wildcard pattern matching, single-quote preservation, and fallback behavior (19 assertions).
   - `test_prompt.c`: PS1 dynamic escape specifiers (`\u`, `\h`, `\w`, `\W`, `\t`, `\d`, `\g`, `\$`, `\e`, `\n`, `\\`) and fallback rendering (24 assertions).
-- **Integration Test Suites (`tests/integration/`)**: 94 test cases partitioned across 8 dedicated domains:
-  - `test_builtins.sh`: Built-in commands (`pwd`, `cd`, `export`, `unset`, `env`, `dirs`, `pushd`, `popd`, `z`, `help`, `exit`).
+  - `test_braces.c`: Brace expansion comma lists, numeric/character sequences, step increments, and Cartesian products (29 assertions).
+- **Integration Test Suites (`tests/integration/`)**: 107 test cases partitioned across 8 dedicated domains:
+  - `test_builtins.sh`: Built-in commands (`pwd`, `cd`, `export`, `unset`, `env`, `dirs`, `pushd`, `popd`, `z`, `set`, `help`, `exit`) (21 tests).
   - `test_pipelines.sh`: Pipelines, standard & extended I/O redirections (`<`, `>`, `>>`, `2>`, `2>>`, `&>`, `2>&1`), herestrings (`<<<`), heredocs (`<< DELIM`), and chaining operators (`;`, `&&`, `||`) (22 tests).
-  - `test_substitutions.sh`: Subshell command substitutions (`$(cmd)` & `` `cmd` ``), arithmetic expansion (`$(( ... ))`), pathname wildcard globbing (`*`, `?`), quoting (`''`, `""`), and variable expansions (`$VAR`, `${VAR}`, `$?`, `~`) (18 tests).
-  - `test_jobs.sh`: Background execution (`&`), job tracking (`jobs`), process signaling (`kill`), foreground/background control (`fg`, `bg`), and signal protection (`SIGINT`, `SIGTSTP`).
-  - `test_safety.sh`: Proactive safety shield (`safemode`), dangerous deletion prevention (`rm -rf /`), and command aliases (`alias`, `unalias`).
-  - `test_observability.sh`: Command execution profiler (`time`) and kernel telemetry dashboard (`sysinfo`).
-  - `test_fuzzy.sh`: Typo correction suggestions and POSIX exit code 127 handling.
-  - `test_scripting.sh`: Non-interactive one-liners (`-c`), script execution (`.apex`), comment parsing, and environment sourcing (`source`, `.`).
+  - `test_substitutions.sh`: Subshell command substitutions (`$(cmd)` & `` `cmd` ``), arithmetic expansion (`$(( ... ))`), pathname wildcard globbing (`*`, `?`), brace expansion (`{a,b}`, `{1..5}`, Cartesian), process substitution (`<(cmd)`), quoting (`''`, `""`), and variable expansions (`$VAR`, `${VAR}`, `$?`, `~`) (25 tests).
+  - `test_jobs.sh`: Background execution (`&`), job tracking (`jobs`), process signaling (`kill`), foreground/background control (`fg`, `bg`), and signal protection (`SIGINT`, `SIGTSTP`) (11 tests).
+  - `test_safety.sh`: Proactive safety shield (`safemode`), dangerous deletion prevention (`rm -rf /`), and command aliases (`alias`, `unalias`) (7 tests).
+  - `test_observability.sh`: Command execution profiler (`time`) and kernel telemetry dashboard (`sysinfo`) (5 tests).
+  - `test_fuzzy.sh`: Typo correction suggestions and POSIX exit code 127 handling (5 tests).
+  - `test_scripting.sh`: Non-interactive one-liners (`-c`), script execution (`.apex`), comment parsing, and environment sourcing (`source`, `.`) (11 tests).
 
 ### Test Execution Commands
 ```bash
-# Run all integration suites (94 tests)
+# Run all integration suites (107 tests)
 make test
 
 # Ultra-fast runner skipping sleep tests (< 1.5s)
 make test-fast
 
-# Compile and run native C algorithmic unit tests (94 assertions across 5 suites)
+# Compile and run native C algorithmic unit tests (123 assertions across 6 suites)
 make test-unit
 
 # Run specific integration suite (e.g. substitutions, builtins, jobs, safety)
 make test-suite SUITE=substitutions
 
-# Run the complete test battery (Integration + Unit = 188 assertions across 13 suites)
+# Run the complete test battery (Integration + Unit = 230 assertions across 14 suites)
 make test-all
 
 # Compile with AddressSanitizer & UBSan and verify zero memory leaks

@@ -45,7 +45,8 @@ char *builtin_str[] = {
     "pushd",
     "popd",
     "dirs",
-    "z"
+    "z",
+    "set"
 };
 
 int (*builtin_func[])(char **) = {
@@ -70,7 +71,8 @@ int (*builtin_func[])(char **) = {
     &lsh_pushd,
     &lsh_popd,
     &lsh_dirs,
-    &lsh_z
+    &lsh_z,
+    &lsh_set
 };
 
 int lsh_num_builtins(void)

@@ -1,11 +1,11 @@
 CC ?= gcc
 CFLAGS ?= -Wall -Wextra -pedantic -std=c99 -O2 -Iinclude
 TARGET = apex-shell
-SRCS = src/main.c src/builtins.c src/execute.c src/parser.c src/expander.c src/prompt.c src/redirection.c src/globber.c src/signals.c src/jobs.c src/telemetry.c src/fuzzy.c src/history.c src/alias.c src/safety.c src/linereader.c src/highlight.c src/completion.c src/arithmetic.c
+SRCS = src/main.c src/builtins.c src/execute.c src/parser.c src/expander.c src/prompt.c src/redirection.c src/globber.c src/signals.c src/jobs.c src/telemetry.c src/fuzzy.c src/history.c src/alias.c src/safety.c src/linereader.c src/highlight.c src/completion.c src/arithmetic.c src/braces.c src/procsub.c src/options.c
 OBJS = $(SRCS:.c=.o)
 NON_MAIN_OBJS = $(filter-out src/main.o, $(OBJS))
 
-UNIT_TESTS = tests/unit/test_fuzzy tests/unit/test_alias tests/unit/test_arithmetic tests/unit/test_glob tests/unit/test_prompt
+UNIT_TESTS = tests/unit/test_fuzzy tests/unit/test_alias tests/unit/test_arithmetic tests/unit/test_glob tests/unit/test_prompt tests/unit/test_braces
 
 all: $(TARGET)
 
@@ -31,6 +31,9 @@ tests/unit/test_glob: tests/unit/test_glob.c $(NON_MAIN_OBJS)
 tests/unit/test_prompt: tests/unit/test_prompt.c src/prompt.c
 	$(CC) $(CFLAGS) $^ -o $@
 
+tests/unit/test_braces: tests/unit/test_braces.c src/braces.c
+	$(CC) $(CFLAGS) $^ -o $@
+
 clean:
 	rm -f $(TARGET) c-shell my_shell src/*.o *.o $(UNIT_TESTS)
 
@@ -49,6 +52,7 @@ test-unit: $(UNIT_TESTS)
 	@./tests/unit/test_arithmetic
 	@./tests/unit/test_glob
 	@./tests/unit/test_prompt
+	@./tests/unit/test_braces
 
 test-all: $(TARGET) $(UNIT_TESTS)
 	@bash tests/run_tests.sh --all
